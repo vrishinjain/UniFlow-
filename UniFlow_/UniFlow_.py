@@ -17,8 +17,9 @@ def index() -> rx.Component:
             rx.heading("Welcome to Reflex!", size="9"),
             rx.text(
                 "Get started by editing ",
-                rx.code(f"{config.app_name}/{config.app_name}.py"),
+                rx.code(f"{config.app_name}/{config.app_name}.py"), "\n\n\n*****test 28 september 2026***** (anthony)\n\n",
                 size="5",
+                white_space="pre"
             ),
             rx.link(
                 rx.button("Check out our docs!"),
