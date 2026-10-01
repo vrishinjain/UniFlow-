@@ -19,7 +19,7 @@ def index() -> rx.Component:
                 "Get started by editing ",
                 rx.code(f"{config.app_name}/{config.app_name}.py"),
                 "\n\n\nfront page test Anthony Gong\n\n\n",
-                "\n\n Library is flooding \n\n"
+                "\n\n\nLibrary is flooding\n\n\n"
                 size="5",
                 white_space="pre",
             ),
