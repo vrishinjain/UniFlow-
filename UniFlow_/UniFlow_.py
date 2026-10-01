@@ -21,6 +21,7 @@ def index() -> rx.Component:
                 size="5",
                 white_space="pre"
             ),
+            rx.text("Logan was here"),
             rx.link(
                 rx.button("Check out our docs!"),
                 href="https://reflex.dev/docs/getting-started/introduction/",
