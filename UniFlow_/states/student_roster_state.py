@@ -3,9 +3,8 @@ import os
 from typing import TypedDict
 
 import reflex as rx
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import create_async_engine
 
 
 class StudentRow(TypedDict):
@@ -30,9 +29,9 @@ class StudentRosterState(rx.State):
             if not database_url:
                 raise RuntimeError("Database connection is unavailable")
             url = make_url(database_url).set(drivername="postgresql+psycopg")
-            engine = create_async_engine(url)
-            async with engine.connect() as connection:
-                result = await connection.execute(
+            engine = create_engine(url)
+            with engine.connect() as connection:
+                result = connection.execute(
                     text("SELECT id, name FROM public.students ORDER BY id")
                 )
                 students: list[StudentRow] = [
@@ -48,9 +47,6 @@ class StudentRosterState(rx.State):
                 self.error = "The student roster could not be loaded. Please try refreshing."
         finally:
             if engine is not None:
-                try:
-                    await engine.dispose()
-                except Exception as e:
-                    logging.exception(f"Error: {e}")
+                engine.dispose()
             async with self:
                 self.loading = False
