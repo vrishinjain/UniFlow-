@@ -12,14 +12,14 @@ class State(rx.State):
 def index() -> rx.Component:
     # Welcome Page (Index)
     return rx.container(
-        rx.color_mode.button(position="top-right"),
         rx.vstack(
             rx.heading("Welcome to Reflex!", size="9"),
             rx.text(
                 "Get started by editing ",
-                rx.code(f"{config.app_name}/{config.app_name}.py"), "\n\n\n*****test 28 september 2026***** (anthony)\n\n",
+                rx.code(f"{config.app_name}/{config.app_name}.py"),
+                "\n\n\n*****test 28 september 2026***** (anthony)\n\n",
                 size="5",
-                white_space="pre"
+                white_space="pre",
             ),
             rx.text("Logan was here"),
             rx.link(
@@ -34,5 +34,5 @@ def index() -> rx.Component:
     )
 
 
-app = rx.App()
+app = rx.App(theme=rx.theme(appearance="light"))
 app.add_page(index)
