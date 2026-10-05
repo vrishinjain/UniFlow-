@@ -60,10 +60,10 @@ class LoginState(rx.State):
                     self.signed_in = True
                 case _:
                     self.message = "Invalid email or password"
-        except Exception:
+        except Exception as exc:
             # Suppress exception details that could contain connection or account data.
-            e = RuntimeError("Sign-in could not be completed")
-            logging.exception(f"Error: {e}", exc_info=(RuntimeError, e, None))
+
+            logging.error("Sign-in failed (%s)", type(exc).name)
             self.signed_in = False
             self.full_name = ""
             self.role = ""
