@@ -1,5 +1,6 @@
 from datetime import datetime
 
+import reflex as rx
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
@@ -37,9 +38,12 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(Text, nullable=False)
     email: Mapped[str] = mapped_column(Text, nullable=False)
     password_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    role: Mapped[str] = mapped_column(Text, nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False, default="student")
     status: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'pending'")
+        Text,
+        nullable=False,
+        default="pending",
+        server_default=text("'pending'"),
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
