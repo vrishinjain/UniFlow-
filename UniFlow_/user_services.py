@@ -23,6 +23,8 @@ __all__ = [
     "activate_user",
     "reject_user",
     "seed_system_admin",
+    "update_user_role",
+    "update_user_status",
 ]
 
 _ALLOWED_ROLES = frozenset(
@@ -226,3 +228,33 @@ def seed_system_admin(full_name: str, email: str, password: str) -> User:
                 session, name, address, password_hash, "system_admin", "active"
             )
     return user
+
+
+def update_user_role(user_id: int, role: str) -> None:
+    """Update a user's role; invalid roles and missing users raise ValueError."""
+    if not isinstance(role, str) or role not in _ALLOWED_ROLES:
+        raise ValueError(
+            "Invalid role. Expected system_admin, program_admin, faculty, student, or sponsor."
+        )
+    with _transaction() as session:
+        user = session.get(User, user_id)
+        if user is None:
+            raise ValueError("No user exists with that ID.")
+        user.role = role
+
+
+def update_user_status(user_id: int, status: str) -> None:
+    """Update a user's status; invalid statuses and missing users raise ValueError."""
+    if not isinstance(status, str) or status not in {
+        "pending",
+        "active",
+        "rejected",
+    }:
+        raise ValueError(
+            "Invalid status. Expected pending, active, or rejected."
+        )
+    with _transaction() as session:
+        user = session.get(User, user_id)
+        if user is None:
+            raise ValueError("No user exists with that ID.")
+        user.status = status
