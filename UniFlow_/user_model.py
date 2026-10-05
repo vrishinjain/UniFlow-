@@ -1,5 +1,3 @@
-import reflex as rx
-
 from datetime import datetime
 
 from sqlalchemy import (
@@ -15,12 +13,10 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):
-    """Independent ORM metadata; never registered with Reflex migrations."""
+    pass
 
 
 class User(Base):
-    """Mapping of the existing table only; importing this module executes no SQL."""
-
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("email", name="users_email_key"),

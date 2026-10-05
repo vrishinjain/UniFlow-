@@ -1,9 +1,10 @@
 import unittest
 import uuid
 
+import reflex as rx
+
 from UniFlow_.user_model import User
 from UniFlow_.user_services import (
-    _transaction,
     create_user,
     get_user_by_email,
     update_user_role,
@@ -22,10 +23,11 @@ class UserServiceUpdateTests(unittest.TestCase):
         )
 
     def _remove_test_user(self, user_id: int) -> None:
-        with _transaction() as session:
+        with rx.session() as session:
             user = session.get(User, user_id)
             if user is not None:
                 session.delete(user)
+                session.commit()
 
     def test_update_user_role(self) -> None:
         user = self._create_test_user()
