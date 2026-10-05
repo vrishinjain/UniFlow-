@@ -74,11 +74,11 @@ def user_row(user: SampleUser) -> rx.Component:
                 class_name="flex items-center gap-3",
             ),
             scope="row",
-            class_name="px-6 py-4 text-left",
+            class_name="px-4 py-4 text-left",
         ),
-        rx.el.td(user["email"], class_name="px-6 py-4 text-slate-500"),
-        rx.el.td(user["role"], class_name="px-6 py-4 text-slate-600"),
-        rx.el.td(status_badge(user["status"]), class_name="px-6 py-4"),
+        rx.el.td(user["email"], class_name="px-4 py-4 text-slate-500"),
+        rx.el.td(user["role"], class_name="px-4 py-4 text-slate-600"),
+        rx.el.td(status_badge(user["status"]), class_name="px-4 py-4"),
         rx.el.td(
             rx.cond(
                 user["status"] == "Pending",
@@ -112,7 +112,7 @@ def user_row(user: SampleUser) -> rx.Component:
                     rx.el.span("No actions available", class_name="sr-only"),
                 ),
             ),
-            class_name="px-6 py-4",
+            class_name="sticky right-0 z-10 bg-white px-4 py-4",
         ),
         key=user["id"],
         class_name="border-b border-slate-100 bg-white text-sm last:border-b-0 even:bg-slate-50/40 hover:bg-slate-50",
@@ -129,7 +129,11 @@ def column_header(label: str, icon: str) -> rx.Component:
             class_name="flex items-center gap-2",
         ),
         scope="col",
-        class_name="px-6 py-3.5 text-left text-xs font-medium text-slate-500",
+        class_name=rx.cond(
+            label == "Actions",
+            "sticky right-0 z-20 bg-slate-50 px-4 py-3.5 text-left text-xs font-medium text-slate-500",
+            "bg-slate-50 px-4 py-3.5 text-left text-xs font-medium text-slate-500",
+        ),
     )
 
 
@@ -210,12 +214,12 @@ def user_management() -> rx.Component:
                                     class_name="mt-1 text-sm text-slate-500",
                                 ),
                                 col_span=5,
-                                class_name="px-6 py-14 text-center",
+                                class_name="px-4 py-14 text-center",
                             ),
                         ),
                     ),
                 ),
-                class_name="table-auto w-full min-w-[960px] whitespace-nowrap",
+                class_name="table-auto w-full min-w-[880px] whitespace-nowrap",
             ),
             role="region",
             aria_label="Sample user management table",
