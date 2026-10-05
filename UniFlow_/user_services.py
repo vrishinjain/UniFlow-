@@ -112,6 +112,23 @@ def create_user(full_name: str, email: str, password: str, role: str) -> User:
     password_hash = _hash_password(password)
     try:
         with rx.session() as session:
+            if role == "system_admin":
+                session.execute(
+                    text("SELECT pg_advisory_xact_lock(:lock_key)"),
+                    {"lock_key": _ADMIN_SEED_LOCK},
+                )
+                existing_admin = (
+                    session.execute(
+                        select(User)
+                        .where(User.role == "system_admin")
+                        .order_by(User.id)
+                        .limit(1)
+                    )
+                    .scalars()
+                    .first()
+                )
+                if existing_admin is not None:
+                    raise ValueError("A system administrator already exists.")
             user = _insert_user(
                 session, name, address, password_hash, role, "pending"
             )
@@ -262,6 +279,26 @@ def update_user_role(user_id: int, role: str) -> None:
             user = session.get(User, user_id)
             if user is None:
                 raise ValueError("No user exists with that ID.")
+            if role == "system_admin":
+                session.execute(
+                    text("SELECT pg_advisory_xact_lock(:lock_key)"),
+                    {"lock_key": _ADMIN_SEED_LOCK},
+                )
+                existing_admin = (
+                    session.execute(
+                        select(User)
+                        .where(
+                            User.role == "system_admin",
+                            User.id != user_id,
+                        )
+                        .order_by(User.id)
+                        .limit(1)
+                    )
+                    .scalars()
+                    .first()
+                )
+                if existing_admin is not None:
+                    raise ValueError("A system administrator already exists.")
             user.role = role
             session.commit()
     except SQLAlchemyError as e:

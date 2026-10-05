@@ -1,5 +1,6 @@
 import unittest
 import uuid
+from unittest.mock import patch
 
 import reflex as rx
 
@@ -13,6 +14,61 @@ from UniFlow_.user_services import (
 
 
 class UserServiceUpdateTests(unittest.TestCase):
+    def test_create_system_admin_when_one_already_exists_is_blocked(
+        self,
+    ) -> None:
+        with (
+            patch("UniFlow_.user_services.rx.session") as session_factory,
+            patch(
+                "UniFlow_.user_services._hash_password", return_value="hashed"
+            ),
+            patch("UniFlow_.user_services._insert_user") as insert_user,
+        ):
+            session = session_factory.return_value.__enter__.return_value
+            session.execute.return_value.scalars.return_value.first.return_value = User(
+                full_name="Existing Admin",
+                email="existing-admin@example.test",
+                password_hash="hashed",
+                role="system_admin",
+                status="active",
+            )
+
+            with self.assertRaisesRegex(
+                ValueError, "^A system administrator already exists\\.$"
+            ):
+                create_user(
+                    full_name="New Admin",
+                    email="new-admin@example.test",
+                    password="Test-password-42!",
+                    role="system_admin",
+                )
+
+            insert_user.assert_not_called()
+            session.commit.assert_not_called()
+
+    def test_update_role_to_system_admin_when_another_exists_is_blocked(
+        self,
+    ) -> None:
+        user = User(
+            full_name="Target User",
+            email="target-user@example.test",
+            password_hash="hashed",
+            role="student",
+            status="active",
+        )
+        with patch("UniFlow_.user_services.rx.session") as session_factory:
+            session = session_factory.return_value.__enter__.return_value
+            session.get.return_value = user
+            session.execute.return_value.scalars.return_value.first.return_value = object()
+
+            with self.assertRaisesRegex(
+                ValueError, "^A system administrator already exists\\.$"
+            ):
+                update_user_role(user_id=1, role="system_admin")
+
+            self.assertEqual(user.role, "student")
+            session.commit.assert_not_called()
+
     def _create_test_user(self) -> User:
         unique_id = uuid.uuid4().hex
         return create_user(
