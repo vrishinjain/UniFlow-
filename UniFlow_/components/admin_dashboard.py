@@ -89,7 +89,7 @@ def user_row(user: SampleUser) -> rx.Component:
                         ),
                         "Approve",
                         type="button",
-                        aria_label=f"Approve sample user {user['name']}",
+                        aria_label=f"Approve account {user['name']}",
                         on_click=AdminState.approve_user(user["id"]),
                         class_name="inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700",
                     ),
@@ -99,7 +99,7 @@ def user_row(user: SampleUser) -> rx.Component:
                         ),
                         "Reject",
                         type="button",
-                        aria_label=f"Reject sample user {user['name']}",
+                        aria_label=f"Reject account {user['name']}",
                         on_click=AdminState.reject_user(user["id"]),
                         class_name="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700",
                     ),
@@ -148,13 +148,13 @@ def user_management() -> rx.Component:
                         class_name="text-lg font-semibold text-slate-900",
                     ),
                     rx.el.span(
-                        f"{AdminState.total_users} sample users",
+                        f"{AdminState.total_users} accounts shown",
                         class_name="w-fit rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600",
                     ),
                     class_name="flex flex-wrap items-center gap-3",
                 ),
                 rx.el.p(
-                    "Review university access requests and manage sample user statuses.",
+                    "Review live university access requests and see decisions made in this session.",
                     class_name="mt-2 text-sm text-slate-500",
                 ),
             ),
@@ -167,7 +167,7 @@ def user_management() -> rx.Component:
                 rx.cond(
                     AdminState.pending_users > 0,
                     f"{AdminState.pending_users} awaiting review",
-                    "All requests reviewed",
+                    "No pending accounts",
                 ),
                 class_name="flex items-center gap-2 text-xs font-medium text-slate-600",
             ),
@@ -181,7 +181,7 @@ def user_management() -> rx.Component:
         rx.el.div(
             rx.el.table(
                 rx.el.caption(
-                    "Sample university users. Approve or reject pending requests; changes are in memory only.",
+                    "Pending university accounts and decisions made in this session.",
                     class_name="sr-only",
                 ),
                 rx.el.thead(
@@ -206,11 +206,11 @@ def user_management() -> rx.Component:
                                     aria_hidden=True,
                                 ),
                                 rx.el.p(
-                                    "No sample users to display",
+                                    "No pending accounts or decisions from this session",
                                     class_name="font-medium text-slate-700",
                                 ),
                                 rx.el.p(
-                                    "User counts are zero when the list is empty.",
+                                    "The list will show pending accounts after they are loaded.",
                                     class_name="mt-1 text-sm text-slate-500",
                                 ),
                                 col_span=5,
@@ -222,14 +222,14 @@ def user_management() -> rx.Component:
                 class_name="table-auto w-full min-w-[880px] whitespace-nowrap",
             ),
             role="region",
-            aria_label="Sample user management table",
+            aria_label="University account management table",
             aria_describedby="table-scroll-hint",
             tab_index=0,
             class_name="w-full overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-teal-700",
         ),
         rx.el.div(
             rx.el.span(
-                f"Showing all {AdminState.total_users} sample users",
+                f"Showing {AdminState.total_users} accounts in this view",
                 class_name="text-xs text-slate-500",
             ),
             rx.el.span(
@@ -295,7 +295,7 @@ def admin_dashboard() -> rx.Component:
                 class_name="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl",
             ),
             rx.el.p(
-                "Welcome back. Here's an overview of your university community and access requests.",
+                "Review pending university access requests and decisions made in this session.",
                 class_name="mt-3 text-sm leading-6 text-slate-500 sm:text-base",
             ),
             rx.el.div(
@@ -306,40 +306,40 @@ def admin_dashboard() -> rx.Component:
                 ),
                 rx.el.p(
                     rx.el.span(
-                        "Sample workspace. ",
+                        "Live account review. ",
                         class_name="font-semibold text-slate-700",
                     ),
-                    "All users below are fictional. Approvals and rejections update this session's in-memory sample only; nothing is saved to a database.",
+                    "Pending accounts are loaded from the user directory. Approvals and rejections are saved, and this view tracks decisions made during this session.",
                     class_name="text-xs leading-5 text-slate-600 sm:text-sm",
                 ),
                 class_name="mt-6 flex items-start gap-3 rounded-xl border border-teal-100 bg-teal-50/60 px-4 py-3",
             ),
             rx.el.section(
                 summary_card(
-                    "Total Users",
+                    "Accounts Shown",
                     AdminState.total_users,
                     "users",
-                    "All users in the sample directory",
+                    "Pending accounts and this-session decisions shown below",
                 ),
                 summary_card(
-                    "Pending Users",
+                    "Pending Accounts",
                     AdminState.pending_users,
                     "clock-3",
                     "Access requests awaiting review",
                 ),
                 summary_card(
-                    "Active Users",
+                    "Approved This Session",
                     AdminState.active_users,
                     "user-check",
-                    "Approved university members",
+                    "Approvals recorded during this session",
                 ),
                 summary_card(
-                    "Rejected Users",
+                    "Rejected This Session",
                     AdminState.rejected_users,
                     "user-x",
-                    "Requests that were not approved",
+                    "Rejections recorded during this session",
                 ),
-                aria_label="Sample user summary",
+                aria_label="Pending accounts and this-session decisions summary",
                 class_name="mt-7 grid w-full grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-4",
             ),
             user_management(),
@@ -357,7 +357,7 @@ def admin_dashboard() -> rx.Component:
                     aria_hidden=True,
                 ),
                 rx.el.p(
-                    "UniFlow · University administration · Sample workspace",
+                    "UniFlow · University administration · Pending account review",
                     class_name="text-xs text-slate-400",
                 ),
                 class_name="mt-8 flex items-center justify-center gap-2 pb-4",

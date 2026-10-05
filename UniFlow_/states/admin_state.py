@@ -1,11 +1,19 @@
+import asyncio
+import logging
+from typing import TypedDict
+
 import reflex as rx
 
-from typing import TypedDict
-from faker import Faker
+from UniFlow_.user_model import User
+from UniFlow_.user_services import (
+    activate_user,
+    list_pending_users,
+    reject_user,
+)
 
 
 class SampleUser(TypedDict):
-    id: str
+    id: int
     name: str
     email: str
     role: str
@@ -13,38 +21,32 @@ class SampleUser(TypedDict):
     initials: str
 
 
-def sample_university_users() -> list[SampleUser]:
-    fake = Faker("en_US")
-    fake.seed_instance(42)
-    users: list[SampleUser] = []
-    assignments = (
-        ("Student", "Pending"),
-        ("Faculty", "Pending"),
-        ("Staff", "Pending"),
-        ("Student", "Active"),
-        ("Faculty", "Active"),
-        ("Staff", "Active"),
-        ("Administrator", "Active"),
-        ("Student", "Rejected"),
+def _to_sample_user(user: User) -> SampleUser:
+    name_parts = user.full_name.split()
+    initials = "".join(part[0] for part in name_parts[:2]).upper()
+    return SampleUser(
+        id=user.id,
+        name=user.full_name,
+        email=user.email,
+        role=user.role.replace("_", " ").title(),
+        status=user.status.title(),
+        initials=initials,
     )
-    for index, (role, status) in enumerate(assignments):
-        first = fake.first_name()
-        last = fake.last_name()
-        users.append(
-            SampleUser(
-                id=f"sample-{index + 1}",
-                name=f"{first} {last}",
-                email=f"{first.lower()}.{last.lower()}@university.example.edu",
-                role=role,
-                status=status,
-                initials=f"{first[0]}{last[0]}",
-            )
-        )
-    return users
+
+
+def _display_users(
+    pending: list[SampleUser], reviewed: list[SampleUser]
+) -> list[SampleUser]:
+    reviewed_ids = {user["id"] for user in reviewed}
+    return [
+        user for user in pending if user["id"] not in reviewed_ids
+    ] + reviewed
 
 
 class AdminState(rx.State):
-    users: list[SampleUser] = sample_university_users()
+    users: list[SampleUser] = []
+    reviewed_users: list[SampleUser] = []
+    processing_ids: list[int] = []
     announcement: str = ""
 
     @rx.var
@@ -63,20 +65,86 @@ class AdminState(rx.State):
     def rejected_users(self) -> int:
         return sum(user["status"] == "Rejected" for user in self.users)
 
-    def _review_user(self, user_id: str, status: str) -> None:
-        for index, user in enumerate(self.users):
-            if user["id"] == user_id and user["status"] == "Pending":
-                updated = user.copy()
-                updated["status"] = status
-                self.users[index] = updated
-                decision = "approved" if status == "Active" else "rejected"
-                self.announcement = f"{user['name']} {decision}. Sample status is now {status}. This change is in memory only."
+    @rx.event(background=True)
+    async def load_pending_users(self):
+        try:
+            pending_records = await asyncio.to_thread(list_pending_users)
+            pending = [_to_sample_user(user) for user in pending_records]
+        except Exception as e:
+            logging.exception(f"Error: {e}")
+            async with self:
+                self.announcement = (
+                    "Unable to load pending accounts. Please try again."
+                )
+            return
+        async with self:
+            self.users = _display_users(pending, self.reviewed_users)
+            self.announcement = "Pending accounts refreshed."
+
+    async def _review_account(self, user_id: int, approve: bool):
+        async with self:
+            is_pending = any(
+                user["id"] == user_id and user["status"] == "Pending"
+                for user in self.users
+            )
+            if not is_pending:
+                self.announcement = "This account is no longer pending review."
                 return
+            if user_id in self.processing_ids:
+                return
+            self.processing_ids.append(user_id)
 
-    @rx.event
-    def approve_user(self, user_id: str):
-        self._review_user(user_id, "Active")
+        service = activate_user if approve else reject_user
+        decision = "approved" if approve else "rejected"
+        status = "Active" if approve else "Rejected"
+        try:
+            reviewed_record = await asyncio.to_thread(service, user_id)
+            reviewed = _to_sample_user(reviewed_record)
+        except Exception as e:
+            logging.exception(f"Error: {e}")
+            async with self:
+                self.processing_ids.remove(user_id)
+                self.announcement = (
+                    f"Unable to {decision} this account. Please try again."
+                )
+            return
 
-    @rx.event
-    def reject_user(self, user_id: str):
-        self._review_user(user_id, "Rejected")
+        try:
+            pending_records = await asyncio.to_thread(list_pending_users)
+            pending = [_to_sample_user(user) for user in pending_records]
+        except Exception as e:
+            logging.exception(f"Error: {e}")
+            async with self:
+                self._record_reviewed_user(reviewed)
+                self.users = [
+                    reviewed if user["id"] == user_id else user
+                    for user in self.users
+                ]
+                self.processing_ids.remove(user_id)
+                self.announcement = f"{reviewed['name']} {decision}. Pending accounts could not be refreshed."
+            return
+
+        async with self:
+            self._record_reviewed_user(reviewed)
+            self.users = _display_users(pending, self.reviewed_users)
+            self.processing_ids.remove(user_id)
+            self.announcement = (
+                f"{reviewed['name']} {decision}. Status is now {status}."
+            )
+
+    def _record_reviewed_user(self, reviewed: SampleUser) -> None:
+        self.reviewed_users = [
+            user for user in self.reviewed_users if user["id"] != reviewed["id"]
+        ] + [reviewed]
+
+    @rx.event(background=True)
+    async def approve_user(self, user_id: int):
+        async with self:
+            pass
+        await self._review_account(user_id, approve=True)
+
+    @rx.event(background=True)
+    async def reject_user(self, user_id: int):
+        async with self:
+            pass
+        await self._review_account(user_id, approve=False)

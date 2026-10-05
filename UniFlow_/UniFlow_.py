@@ -4,6 +4,7 @@ import reflex as rx
 
 from rxconfig import config
 from UniFlow_.components.admin_dashboard import admin_dashboard
+from UniFlow_.states.admin_state import AdminState
 
 
 class State(rx.State):
@@ -49,4 +50,9 @@ app = rx.App(
     ],
 )
 app.add_page(index)
-app.add_page(admin_dashboard, route="/admin", title="Admin Dashboard | UniFlow")
+app.add_page(
+    admin_dashboard,
+    route="/admin",
+    title="Admin Dashboard | UniFlow",
+    on_load=AdminState.load_pending_users,
+)
