@@ -59,6 +59,38 @@ def status_badge(status: rx.Var[str]) -> rx.Component:
     )
 
 
+def role_dropdown(user: SampleUser) -> rx.Component:
+    return rx.el.div(
+        rx.el.label(
+            "Approval role",
+            html_for=f"approval-role-{user['id']}",
+            class_name="sr-only",
+        ),
+        rx.el.select(
+            rx.foreach(
+                AdminState.role_options,
+                lambda option: rx.el.option(
+                    option["label"], value=option["value"], key=option["value"]
+                ),
+            ),
+            id=f"approval-role-{user['id']}",
+            aria_label=f"Approval role for {user['name']}",
+            value=AdminState.selected_roles.get(
+                user["id"].to_string(), user["role_key"]
+            ),
+            on_change=lambda role: AdminState.choose_role(user["id"], role),
+            disabled=AdminState.processing_ids.contains(user["id"]),
+            class_name="w-full appearance-none rounded-lg border border-slate-200 bg-white py-2 pr-8 pl-3 text-xs font-medium text-slate-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:cursor-not-allowed disabled:opacity-50",
+        ),
+        rx.icon(
+            "chevron-down",
+            aria_hidden=True,
+            class_name="pointer-events-none absolute top-2.5 right-3 h-3.5 w-3.5 text-slate-400",
+        ),
+        class_name="relative w-full",
+    )
+
+
 def user_row(user: SampleUser) -> rx.Component:
     return rx.el.tr(
         rx.el.th(
@@ -78,32 +110,46 @@ def user_row(user: SampleUser) -> rx.Component:
         ),
         rx.el.td(user["email"], class_name="px-4 py-4 text-slate-500"),
         rx.el.td(user["role"], class_name="px-4 py-4 text-slate-600"),
+        rx.el.td(user["date"], class_name="px-4 py-4 text-slate-500"),
         rx.el.td(status_badge(user["status"]), class_name="px-4 py-4"),
         rx.el.td(
             rx.cond(
                 user["status"] == "Pending",
                 rx.el.div(
-                    rx.el.button(
-                        rx.icon(
-                            "check", class_name="h-3.5 w-3.5", aria_hidden=True
+                    role_dropdown(user),
+                    rx.el.div(
+                        rx.el.button(
+                            rx.icon(
+                                "check",
+                                class_name="h-3.5 w-3.5",
+                                aria_hidden=True,
+                            ),
+                            "Approve",
+                            type="button",
+                            aria_label=f"Approve account {user['name']}",
+                            on_click=AdminState.approve_user(user["id"]),
+                            disabled=AdminState.processing_ids.contains(
+                                user["id"]
+                            ),
+                            class_name="inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 disabled:cursor-not-allowed disabled:opacity-50",
                         ),
-                        "Approve",
-                        type="button",
-                        aria_label=f"Approve account {user['name']}",
-                        on_click=AdminState.approve_user(user["id"]),
-                        class_name="inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-teal-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700",
-                    ),
-                    rx.el.button(
-                        rx.icon(
-                            "x", class_name="h-3.5 w-3.5", aria_hidden=True
+                        rx.el.button(
+                            rx.icon(
+                                "x", class_name="h-3.5 w-3.5", aria_hidden=True
+                            ),
+                            "Reject",
+                            type="button",
+                            aria_label=f"Reject account {user['name']}",
+                            on_click=AdminState.reject_user(user["id"]),
+                            disabled=AdminState.processing_ids.contains(
+                                user["id"]
+                            ),
+                            class_name="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:cursor-not-allowed disabled:opacity-50",
                         ),
-                        "Reject",
-                        type="button",
-                        aria_label=f"Reject account {user['name']}",
-                        on_click=AdminState.reject_user(user["id"]),
-                        class_name="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-600 transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700",
+                        class_name="flex items-center gap-2",
                     ),
-                    class_name="flex items-center gap-2",
+                    aria_busy=AdminState.processing_ids.contains(user["id"]),
+                    class_name="flex flex-col items-start gap-2",
                 ),
                 rx.el.span(
                     rx.el.span(
@@ -188,7 +234,8 @@ def user_management() -> rx.Component:
                     rx.el.tr(
                         column_header("Name", "user-round"),
                         column_header("Email", "mail"),
-                        column_header("Role", "graduation-cap"),
+                        column_header("Requested Role", "graduation-cap"),
+                        column_header("Date", "calendar-days"),
                         column_header("Status", "circle-dot"),
                         column_header("Actions", "list-checks"),
                     ),
@@ -213,13 +260,13 @@ def user_management() -> rx.Component:
                                     "The list will show pending accounts after they are loaded.",
                                     class_name="mt-1 text-sm text-slate-500",
                                 ),
-                                col_span=5,
+                                col_span=6,
                                 class_name="px-4 py-14 text-center",
                             ),
                         ),
                     ),
                 ),
-                class_name="table-auto w-full min-w-[880px] whitespace-nowrap",
+                class_name="table-auto w-full min-w-[1040px] whitespace-nowrap",
             ),
             role="region",
             aria_label="University account management table",

@@ -16,6 +16,7 @@ from UniFlow_.user_model import User
 
 
 __all__ = [
+    "ROLE_OPTIONS",
     "create_user",
     "get_user_by_email",
     "verify_password",
@@ -28,7 +29,8 @@ __all__ = [
 _ALLOWED_ROLES = frozenset(
     {"system_admin", "program_admin", "faculty", "student", "sponsor"}
 )
-_ADMIN_SEED_LOCK = 6143972381094261
+ROLE_OPTIONS: tuple[str, ...] = tuple(sorted(_ALLOWED_ROLES))
+_ADMIN_SEED_LOCK: int = 6143972381094261
 
 
 @lru_cache(maxsize=1)
@@ -171,28 +173,45 @@ def list_pending_users() -> list[User]:
     return users
 
 
-def _set_status(user_id: int, status: str) -> User:
+def _set_status(user_id: int, status: str, role: str | None = None) -> User:
     if (
         isinstance(user_id, bool)
         or not isinstance(user_id, int)
         or user_id <= 0
     ):
         raise ValueError("User ID must be a positive integer.")
-    with _transaction() as session:
-        user = session.scalar(
-            update(User)
-            .where(User.id == user_id)
-            .values(status=status)
-            .returning(User)
+    if role is not None and (
+        not isinstance(role, str) or role not in _ALLOWED_ROLES
+    ):
+        raise ValueError(
+            "Invalid role. Expected system_admin, program_admin, faculty, student, or sponsor."
         )
+    statement = update(User).where(User.id == user_id).values(status=status)
+    if role is not None:
+        statement = statement.where(User.status == "pending").values(role=role)
+    with _transaction() as session:
+        user = session.scalar(statement.returning(User))
         if user is None:
+            if (
+                role is not None
+                and session.scalar(select(User.id).where(User.id == user_id))
+                is not None
+            ):
+                raise ValueError(
+                    "Only pending users can be approved with a role."
+                )
             raise ValueError("No user exists with that ID.")
     return user
 
 
-def activate_user(user_id: int) -> User:
-    """Set only the identified user's status to active; missing IDs raise ValueError."""
-    return _set_status(user_id, "active")
+def activate_user(user_id: int, role: str | None = None) -> User:
+    """Activate a user, optionally assigning an allowed role atomically.
+
+    With a role, only pending users can be approved; invalid roles, missing IDs,
+    and non-pending users raise ValueError without changing the account.
+    Without a role, preserve the role and activate regardless of current status.
+    """
+    return _set_status(user_id, "active", role)
 
 
 def reject_user(user_id: int) -> User:
