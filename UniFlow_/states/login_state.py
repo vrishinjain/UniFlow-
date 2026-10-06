@@ -1,10 +1,11 @@
 import reflex as rx
 
 import asyncio
-import logging
 from typing import Any
 
 from UniFlow_.user_services import get_user_by_email, verify_password
+
+import logging
 
 
 class LoginState(rx.State):
@@ -15,6 +16,16 @@ class LoginState(rx.State):
     loading: bool = False
     message: str = ""
     password_revision: int = 0
+    _session_user_id: int = 0
+
+    def _clear_session(self):
+        self._session_user_id = 0
+        self.signed_in = False
+        self.full_name = ""
+        self.role = ""
+        self.email = ""
+        self.message = ""
+        self.password_revision += 1
 
     @rx.event
     def clear_feedback(self):
@@ -26,6 +37,8 @@ class LoginState(rx.State):
         password = form_data.pop("password", "")
         if self.loading or self.signed_in:
             return
+        self._session_user_id = 0
+        self.signed_in = False
         self.email = str(form_data.get("email", "")).strip()
         self.message = ""
         self.full_name = ""
@@ -57,13 +70,15 @@ class LoginState(rx.State):
                     self.full_name = str(user.full_name).strip()
                     self.role = str(user.role)
                     self.email = str(user.email)
+                    self._session_user_id = int(user.id)
                     self.signed_in = True
+                    if user.role == "system_admin":
+                        yield rx.redirect("/admin")
                 case _:
                     self.message = "Invalid email or password"
         except Exception as exc:
-            # Suppress exception details that could contain connection or account data.
-
-            logging.error("Sign-in failed (%s)", type(exc).name)
+            logging.exception("Unexpected error")
+            self._session_user_id = 0
             self.signed_in = False
             self.full_name = ""
             self.role = ""
@@ -77,12 +92,12 @@ class LoginState(rx.State):
             self.password_revision += 1
 
     @rx.event
-    def sign_out(self):
+    async def sign_out(self):
         if self.loading:
             return
-        self.signed_in = False
-        self.full_name = ""
-        self.role = ""
-        self.email = ""
-        self.message = ""
-        self.password_revision += 1
+        from UniFlow_.states.admin_state import AdminState
+
+        admin = await self.get_state(AdminState)
+        admin._clear_access()
+        self._clear_session()
+        return rx.redirect("/")
