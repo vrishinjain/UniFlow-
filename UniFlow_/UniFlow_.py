@@ -45,6 +45,6 @@ def admin() -> rx.Component:
 app.add_page(
     admin,
     route="/admin",
-    title="Request an account · UniFlow",
+    title="Admin page · UniFlow",
     on_load=AdminState.load_admin,
 )
