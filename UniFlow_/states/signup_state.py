@@ -7,12 +7,12 @@ import reflex as rx
 from UniFlow_.user_services import create_user
 
 # What the user picks in the form -> the role saved in the database.
-# Admin roles are never offered here; admins are created separately.
-# "external" -> "sponsor" is an assumption: confirm it with the team.
+# system_admin is never offered here; it is created separately.
 ACCOUNT_TYPES = {
-    "student": "student",
+    "program_admin": "program_admin",
     "faculty": "faculty",
-    "external": "sponsor",
+    "student": "student",
+    "sponsor": "sponsor",
 }
 
 MIN_PASSWORD_LENGTH = 8
