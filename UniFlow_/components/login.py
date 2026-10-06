@@ -97,9 +97,14 @@ def login_form() -> rx.Component:
             on_focus=LoginState.clear_feedback,
             custom_attrs={"aria-busy": LoginState.loading},
         ),
-        rx.el.p(
-            "Access is available to approved university accounts.",
-            class_name="mt-6 border-t border-[#E9EBE6] pt-5 text-center text-xs leading-5 text-[#737C81]",
+            rx.el.p(
+                "Don't have an account? ",
+                rx.el.a(
+                    "Request one",
+                    href="/signup",
+                    class_name="font-semibold text-[#246D67] underline hover:text-[#1C5752]",
+                ),
+            class_name="mt-6 border-t border-[#E9EBE6] pt-5 text-center text-sm leading-5 text-[#737C81]",
         ),
         class_name="w-full rounded-2xl border border-[#E2E4DC] bg-white p-7 sm:p-9",
     )
