@@ -12,6 +12,7 @@ class LoginState(rx.State):
     full_name: str = ""
     role: str = ""
     signed_in: bool = False
+    _authenticated_user_id: int = 0
     loading: bool = False
     message: str = ""
     password_revision: int = 0
@@ -26,6 +27,11 @@ class LoginState(rx.State):
         password = form_data.pop("password", "")
         if self.loading or self.signed_in:
             return
+        from UniFlow_.states.role_dashboard_state import RoleDashboardState
+
+        dashboard = await self.get_state(RoleDashboardState)
+        dashboard._clear_authorization()
+        self._authenticated_user_id = 0
         self.email = str(form_data.get("email", "")).strip()
         self.message = ""
         self.full_name = ""
@@ -57,13 +63,22 @@ class LoginState(rx.State):
                     self.full_name = str(user.full_name).strip()
                     self.role = str(user.role)
                     self.email = str(user.email)
+                    self._authenticated_user_id = int(user.id)
                     self.signed_in = True
+                    routes = {
+                        "student": "/student",
+                        "faculty": "/faculty",
+                        "program_admin": "/programadmin",
+                        "sponsor": "/sponsor",
+                    }
+                    route = routes.get(self.role)
+                    if route:
+                        yield rx.redirect(route)
                 case _:
                     self.message = "Invalid email or password"
         except Exception as exc:
-            # Suppress exception details that could contain connection or account data.
-
-            logging.error("Sign-in failed (%s)", type(exc).name)
+            logging.exception(f"Error: {type(exc).__name__}")
+            self._authenticated_user_id = 0
             self.signed_in = False
             self.full_name = ""
             self.role = ""
@@ -77,12 +92,17 @@ class LoginState(rx.State):
             self.password_revision += 1
 
     @rx.event
-    def sign_out(self):
-        if self.loading:
-            return
+    async def sign_out(self):
+        from UniFlow_.states.role_dashboard_state import RoleDashboardState
+
+        dashboard = await self.get_state(RoleDashboardState)
+        dashboard._clear_authorization()
+        self._authenticated_user_id = 0
         self.signed_in = False
         self.full_name = ""
         self.role = ""
         self.email = ""
         self.message = ""
+        self.loading = False
         self.password_revision += 1
+        return rx.redirect("/")
