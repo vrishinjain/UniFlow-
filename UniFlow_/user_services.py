@@ -18,6 +18,8 @@ from UniFlow_.user_model import User
 __all__ = [
     "create_user",
     "get_user_by_email",
+    "get_user_by_id",
+    "change_pending_user_role",
     "verify_password",
     "list_pending_users",
     "activate_user",
@@ -34,6 +36,8 @@ _ADMIN_SEED_LOCK = 6143972381094261
 @lru_cache(maxsize=1)
 def _get_engine() -> Engine:
     # Engine construction is lazy and never initializes or changes the schema.
+    if not os.environ.get("REFLEX_DB_URL"):
+        raise RuntimeError("Account services are temporarily unavailable.")
     return create_engine(
         make_url(os.environ["REFLEX_DB_URL"]).set(
             drivername="postgresql+psycopg"
@@ -142,6 +146,33 @@ def get_user_by_email(email: str) -> User | None:
     return user
 
 
+def _validate_user_id(user_id: int) -> None:
+    if (
+        isinstance(user_id, bool)
+        or not isinstance(user_id, int)
+        or not 0 < user_id <= 9223372036854775807
+    ):
+        raise ValueError(
+            "User ID must be a positive integer within the supported range."
+        )
+
+
+def get_user_by_id(user_id: int) -> User | None:
+    """Look up the current account by its server-side session identity."""
+    _validate_user_id(user_id)
+    with _transaction() as session:
+        user = session.scalar(
+            select(User).from_statement(
+                text(
+                    "SELECT id, full_name, email, password_hash, role, status, created_at "
+                    "FROM public.users WHERE id = :user_id LIMIT 1"
+                )
+            ),
+            {"user_id": user_id},
+        )
+    return user
+
+
 def verify_password(password: str, password_hash: str) -> bool:
     """Check bcrypt credentials; malformed hashes and unsupported inputs return False."""
     if not isinstance(password, str) or not isinstance(password_hash, str):
@@ -171,32 +202,50 @@ def list_pending_users() -> list[User]:
     return users
 
 
-def _set_status(user_id: int, status: str) -> User:
-    if (
-        isinstance(user_id, bool)
-        or not isinstance(user_id, int)
-        or user_id <= 0
-    ):
-        raise ValueError("User ID must be a positive integer.")
+def change_pending_user_role(user_id: int, role: str) -> User:
+    """Change only a pending request's role; reject invalid or stale requests."""
+    _validate_user_id(user_id)
+    if not isinstance(role, str) or role not in _ALLOWED_ROLES:
+        raise ValueError("Choose a valid account role.")
     with _transaction() as session:
         user = session.scalar(
             update(User)
-            .where(User.id == user_id)
+            .where(User.id == user_id, User.status == "pending")
+            .values(role=role)
+            .returning(User)
+        )
+        if user is None:
+            raise ValueError(
+                "This request no longer exists or has already been reviewed. Refresh the list."
+            )
+    return user
+
+
+def _set_status(user_id: int, status: str) -> User:
+    _validate_user_id(user_id)
+    if status not in {"active", "rejected"}:
+        raise ValueError("Choose a valid review decision.")
+    with _transaction() as session:
+        user = session.scalar(
+            update(User)
+            .where(User.id == user_id, User.status == "pending")
             .values(status=status)
             .returning(User)
         )
         if user is None:
-            raise ValueError("No user exists with that ID.")
+            raise ValueError(
+                "This request no longer exists or has already been reviewed. Refresh the list."
+            )
     return user
 
 
 def activate_user(user_id: int) -> User:
-    """Set only the identified user's status to active; missing IDs raise ValueError."""
+    """Activate only a pending request; missing or reviewed IDs raise ValueError."""
     return _set_status(user_id, "active")
 
 
 def reject_user(user_id: int) -> User:
-    """Set only the identified user's status to rejected; missing IDs raise ValueError."""
+    """Reject only a pending request; missing or reviewed IDs raise ValueError."""
     return _set_status(user_id, "rejected")
 
 
