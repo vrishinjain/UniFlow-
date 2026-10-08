@@ -15,7 +15,7 @@ def request_row(request: PendingRequest) -> rx.Component:
                 class_name="mt-1 break-all text-sm text-[#667078]",
             ),
             rx.el.p(
-                rx.icon("calendar", class_name="h-3.5 w-3.5 text-[#737C81]"),
+                rx.el.span("◷", custom_attrs={"aria-hidden": "true"}),
                 rx.el.time(
                     request["date_label"], date_time=request["date_iso"]
                 ),
@@ -48,9 +48,10 @@ def request_row(request: PendingRequest) -> rx.Component:
                     },
                     class_name="h-11 w-full appearance-none rounded-lg border border-[#D9DEDC] bg-white pl-3 pr-10 text-sm text-[#172B3D] focus:border-[#28766F] focus:outline-hidden focus:ring-2 focus:ring-[#28766F]/20 disabled:cursor-not-allowed disabled:bg-[#F5F5F1]",
                 ),
-                rx.icon(
-                    "chevron-down",
-                    class_name="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-[#667078]",
+                rx.el.span(
+                    "⌄",
+                    custom_attrs={"aria-hidden": "true"},
+                    class_name="pointer-events-none absolute right-3 top-2.5 text-lg leading-6 text-[#667078]",
                 ),
                 class_name="relative w-full",
             ),
@@ -58,7 +59,7 @@ def request_row(request: PendingRequest) -> rx.Component:
         ),
         rx.el.div(
             rx.el.button(
-                rx.icon("check", class_name="h-4 w-4"),
+                rx.el.span("✓", custom_attrs={"aria-hidden": "true"}),
                 "Approve",
                 type="button",
                 on_click=lambda: AdminState.decide(request["id"], "approve"),
@@ -69,7 +70,7 @@ def request_row(request: PendingRequest) -> rx.Component:
                 class_name="flex h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-[#246D67] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#1C5752] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F] disabled:cursor-not-allowed disabled:bg-[#548B85]",
             ),
             rx.el.button(
-                rx.icon("x", class_name="h-4 w-4"),
+                rx.el.span("×", custom_attrs={"aria-hidden": "true"}),
                 "Reject",
                 type="button",
                 on_click=lambda: AdminState.decide(request["id"], "reject"),
@@ -100,7 +101,7 @@ def admin_dashboard() -> rx.Component:
                 ),
             ),
             rx.el.button(
-                rx.icon("log-out", class_name="h-4 w-4"),
+                rx.el.span("↪", custom_attrs={"aria-hidden": "true"}),
                 "Sign out",
                 type="button",
                 on_click=AdminState.logout,
@@ -136,7 +137,7 @@ def admin_dashboard() -> rx.Component:
                     ),
                 ),
                 rx.el.button(
-                    rx.icon("refresh-cw", class_name="h-4 w-4"),
+                    rx.el.span("↻", custom_attrs={"aria-hidden": "true"}),
                     "Refresh",
                     type="button",
                     on_click=AdminState.refresh_requests,
@@ -181,8 +182,10 @@ def admin_dashboard() -> rx.Component:
                         class_name="m-0 w-full list-none p-0",
                     ),
                     rx.el.div(
-                        rx.icon(
-                            "inbox", class_name="mx-auto h-8 w-8 text-[#28766F]"
+                        rx.el.span(
+                            "▤",
+                            custom_attrs={"aria-hidden": "true"},
+                            class_name="mx-auto block text-3xl leading-8 text-[#28766F]",
                         ),
                         rx.el.h3(
                             rx.cond(
@@ -221,8 +224,10 @@ def admin_portal() -> rx.Component:
             AdminState.authorized,
             admin_dashboard(),
             rx.el.div(
-                rx.icon(
-                    "shield-check", class_name="mx-auto h-7 w-7 text-[#28766F]"
+                rx.el.span(
+                    "✓",
+                    custom_attrs={"aria-hidden": "true"},
+                    class_name="mx-auto block text-2xl leading-7 text-[#28766F]",
                 ),
                 rx.el.p(
                     "Verifying access…",
