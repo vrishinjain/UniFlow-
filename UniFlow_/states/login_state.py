@@ -27,6 +27,21 @@ class LoginState(rx.State):
         self.message = ""
         self.password_revision += 1
 
+    async def _clear_dashboard_access(self):
+        from UniFlow_.states.student_state import StudentState
+        from UniFlow_.states.faculty_state import FacultyState
+        from UniFlow_.states.program_admin_state import ProgramAdminState
+        from UniFlow_.states.sponsor_state import SponsorState
+
+        for state_class in (
+            StudentState,
+            FacultyState,
+            ProgramAdminState,
+            SponsorState,
+        ):
+            dashboard = await self.get_state(state_class)
+            dashboard._clear_access()
+
     @rx.event
     def clear_feedback(self):
         if not self.loading:
@@ -67,13 +82,21 @@ class LoginState(rx.State):
                 case "rejected":
                     self.message = "Your request was not approved"
                 case "active":
+                    await self._clear_dashboard_access()
                     self.full_name = str(user.full_name).strip()
                     self.role = str(user.role)
                     self.email = str(user.email)
                     self._session_user_id = int(user.id)
                     self.signed_in = True
-                    if user.role == "system_admin":
-                        yield rx.redirect("/admin")
+                    routes = {
+                        "student": "/student",
+                        "faculty": "/faculty",
+                        "program_admin": "/programadmin",
+                        "sponsor": "/sponsor",
+                        "system_admin": "/admin",
+                    }
+                    if user.role in routes:
+                        yield rx.redirect(routes[user.role])
                 case _:
                     self.message = "Invalid email or password"
         except Exception as exc:
@@ -99,5 +122,6 @@ class LoginState(rx.State):
 
         admin = await self.get_state(AdminState)
         admin._clear_access()
+        await self._clear_dashboard_access()
         self._clear_session()
         return rx.redirect("/")
