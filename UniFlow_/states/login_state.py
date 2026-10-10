@@ -43,6 +43,20 @@ class LoginState(rx.State):
             dashboard._clear_access()
 
     @rx.event
+    def redirect_signed_in_user(self):
+        if self.signed_in:
+            routes = {
+                "student": "/student",
+                "faculty": "/faculty",
+                "program_admin": "/programadmin",
+                "sponsor": "/sponsor",
+                "system_admin": "/admin",
+            }
+            if self._session_user_id > 0 and self.role in routes:
+                return rx.redirect(routes[self.role])
+            self._clear_session()
+
+    @rx.event
     def clear_feedback(self):
         if not self.loading:
             self.message = ""
