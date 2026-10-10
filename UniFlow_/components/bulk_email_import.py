@@ -74,11 +74,14 @@ def bulk_email_import() -> rx.Component:
                 "One email per line, with an optional first row of ‘email’. Matching is case-sensitive; surrounding spaces are trimmed. Invalid rows or duplicates reject the entire file before any changes.",
                 class_name="mt-3 text-xs leading-5 text-[#667078]",
             ),
-            rx.el.a(
+            rx.el.button(
                 rx.icon("download", class_name="h-4 w-4"),
                 "Download sample file",
-                href="/sample_emails.txt",
-                download="sample_emails.txt",
+                type="button",
+                on_click=rx.download(
+                    data=b"email\nmarin.willow27@example.org\nsoren.meadow48@example.net\ntalia.cedar63@example.com\n",
+                    filename="sample_emails.txt",
+                ),
                 class_name="mt-3 flex w-fit items-center gap-2 rounded-lg text-xs font-semibold text-[#246D67] underline underline-offset-4 hover:text-[#1C5752] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F]",
             ),
             rx.el.div(
