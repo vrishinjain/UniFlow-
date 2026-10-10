@@ -2,6 +2,7 @@ import reflex as rx
 from UniFlow_.components.signup import signup_portal
 from UniFlow_.components.login import identity_portal
 from UniFlow_.states.signup_state import SignupState
+from UniFlow_.states.login_state import LoginState
 from UniFlow_.states.admin_state import AdminState
 from UniFlow_.components.admin import admin_portal
 from UniFlow_.components.student import student_portal
@@ -31,7 +32,12 @@ app = rx.App(
         ),
     ],
 )
-app.add_page(index, route="/", title="Sign in · UniFlow")
+app.add_page(
+    index,
+    route="/",
+    title="Sign in · UniFlow",
+    on_load=LoginState.redirect_signed_in_user,
+)
 
 
 def signup() -> rx.Component:

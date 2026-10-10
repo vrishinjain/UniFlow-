@@ -22,6 +22,7 @@ __all__ = [
     "change_pending_user_role",
     "verify_password",
     "list_pending_users",
+    "list_active_users",
     "activate_user",
     "reject_user",
     "seed_system_admin",
@@ -200,6 +201,31 @@ def list_pending_users() -> list[User]:
             ).all()
         )
     return users
+
+
+def list_active_users() -> list[User]:
+    """Return detached active-user records in newest-first order."""
+    with _transaction() as session:
+        rows = session.execute(
+            text(
+                "SELECT id, full_name, email, role, status, created_at "
+                "FROM public.users WHERE status = :status "
+                "ORDER BY created_at DESC, id DESC"
+            ),
+            {"status": "active"},
+        ).all()
+    return [
+        User(
+            id=int(row.id),
+            full_name=str(row.full_name),
+            email=str(row.email),
+            password_hash="",
+            role=str(row.role),
+            status=str(row.status),
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
 
 
 def change_pending_user_role(user_id: int, role: str) -> User:
