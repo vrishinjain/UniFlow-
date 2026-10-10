@@ -1,7 +1,14 @@
 import reflex as rx
 
+import csv
+import io
 import logging
 import os
+import re
+import secrets
+import string
+from pathlib import Path
+from typing import TypedDict
 from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import lru_cache
@@ -26,6 +33,8 @@ __all__ = [
     "activate_user",
     "reject_user",
     "seed_system_admin",
+    "parse_bulk_email_file",
+    "bulk_approve_emails",
 ]
 
 _ALLOWED_ROLES = frozenset(
@@ -273,6 +282,215 @@ def activate_user(user_id: int) -> User:
 def reject_user(user_id: int) -> User:
     """Reject only a pending request; missing or reviewed IDs raise ValueError."""
     return _set_status(user_id, "rejected")
+
+
+BULK_EMAIL_MAX_BYTES = 1_048_576
+BULK_EMAIL_MAX_ADDRESSES = 500
+
+
+class BulkEmailResult(TypedDict):
+    email: str
+    password: str
+    outcome: str
+
+
+def _validate_bulk_addresses(addresses: list[str]) -> list[str]:
+    if not addresses:
+        raise ValueError("The file contains no email addresses.")
+    if len(addresses) > BULK_EMAIL_MAX_ADDRESSES:
+        raise ValueError(
+            "A file may contain at most 500 email addresses. Nothing was changed."
+        )
+    validated: list[str] = []
+    seen: set[str] = set()
+    for index, value in enumerate(addresses, start=1):
+        address = _required_text(value, f"Email at entry {index}")
+        local, separator, domain = address.partition("@")
+        labels = domain.split(".")
+        valid = (
+            len(address) <= 254
+            and 0 < len(local) <= 64
+            and separator == "@"
+            and re.fullmatch(r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+", local)
+            is not None
+            and not local.startswith(".")
+            and not local.endswith(".")
+            and ".." not in local
+            and len(labels) >= 2
+            and all(
+                re.fullmatch(
+                    r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label
+                )
+                is not None
+                for label in labels
+            )
+            and re.fullmatch(
+                r"[A-Za-z]{2,63}|xn--[A-Za-z0-9-]{2,59}", labels[-1]
+            )
+            is not None
+        )
+        if not valid:
+            raise ValueError(
+                f"Invalid email at entry {index}: {address}. Nothing was changed."
+            )
+        if address in seen:
+            raise ValueError(
+                f"Duplicate email at entry {index}: {address}. Remove duplicates; nothing was changed."
+            )
+        seen.add(address)
+        validated.append(address)
+    return validated
+
+
+def parse_bulk_email_file(filename: str, data: bytes) -> list[str]:
+    extension = Path(filename).suffix.lower()
+    if extension not in {".txt", ".csv"}:
+        raise ValueError("Choose a UTF-8 .txt or one-column .csv file.")
+    if len(data) > BULK_EMAIL_MAX_BYTES:
+        raise ValueError("The file exceeds 1 MB. Nothing was changed.")
+    try:
+        content = data.decode("utf-8-sig")
+    except UnicodeError as e:
+        logging.exception(f"Error: {e}")
+        raise ValueError(
+            "The file must use UTF-8 encoding. Nothing was changed."
+        ) from e
+    addresses: list[str] = []
+    try:
+        rows = (
+            csv.reader(io.StringIO(content, newline=""), strict=True)
+            if extension == ".csv"
+            else ([line] for line in content.splitlines())
+        )
+        for row_number, row in enumerate(rows, start=1):
+            if not row or (len(row) == 1 and not row[0].strip()):
+                continue
+            if len(row) != 1:
+                raise ValueError(
+                    f"Row {row_number} has multiple columns. Use exactly one email column; nothing was changed."
+                )
+            address = row[0].strip()
+            if not addresses and address.lower() == "email":
+                # Only the first nonblank row may be a header.
+                addresses.append("")
+                continue
+            addresses.append(address)
+    except csv.Error as e:
+        logging.exception(f"Error: {e}")
+        raise ValueError(
+            "The CSV is malformed. Use one email per row; nothing was changed."
+        ) from e
+    if addresses and addresses[0] == "":
+        addresses.pop(0)
+    return _validate_bulk_addresses(addresses)
+
+
+def _temporary_password() -> str:
+    alphabet = f"{string.ascii_letters}{string.digits}!@#$%&*-_"
+    while True:
+        password = "".join(secrets.choice(alphabet) for _ in range(24))
+        if (
+            any(c.islower() for c in password)
+            and any(c.isupper() for c in password)
+            and any(c.isdigit() for c in password)
+            and any(c in "!@#$%&*-_" for c in password)
+        ):
+            return password
+
+
+def bulk_approve_emails(
+    admin_user_id: int, addresses: list[str]
+) -> list[BulkEmailResult]:
+    """Return transient credentials only after a successful, all-or-nothing commit."""
+    _validate_user_id(admin_user_id)
+    emails = _validate_bulk_addresses(addresses)
+    results: list[BulkEmailResult] = []
+    with _transaction() as session:
+        # Serialize against all account writers, including concurrent signups/imports.
+        session.execute(
+            text("LOCK TABLE public.users IN SHARE ROW EXCLUSIVE MODE")
+        )
+        admin = session.execute(
+            text(
+                "SELECT role, status FROM public.users WHERE id = :id FOR UPDATE"
+            ),
+            {"id": admin_user_id},
+        ).first()
+        if (
+            admin is None
+            or admin.role != "system_admin"
+            or admin.status != "active"
+        ):
+            raise PermissionError(
+                "Only active system administrators may import accounts."
+            )
+        rows = session.execute(
+            text(
+                "SELECT id, email, status FROM public.users WHERE email = ANY(:emails)"
+            ),
+            {"emails": emails},
+        ).all()
+        existing = {str(row.email): row for row in rows}
+        inserts: list[dict[str, str]] = []
+        updates: list[dict[str, str | int]] = []
+        for email in emails:
+            user = existing.get(email)
+            if user is not None and user.status == "active":
+                results.append(
+                    BulkEmailResult(
+                        email=email, password="", outcome="Already approved"
+                    )
+                )
+                continue
+            if user is not None and user.status not in {"pending", "rejected"}:
+                raise ValueError(
+                    "An account has an unsupported status. Nothing was changed."
+                )
+            password = _temporary_password()
+            password_hash = _hash_password(password)
+            if user is None:
+                local = email.partition("@")[0]
+                name = re.sub(r"[._-]+", " ", local).strip() or local
+                inserts.append(
+                    {"email": email, "name": name, "hash": password_hash}
+                )
+                outcome = "Created"
+            else:
+                updates.append({"id": int(user.id), "hash": password_hash})
+                outcome = "Reactivated"
+            results.append(
+                BulkEmailResult(email=email, password=password, outcome=outcome)
+            )
+        # Recheck the persisted identity immediately before the first write.
+        admin = session.execute(
+            text(
+                "SELECT role, status FROM public.users WHERE id = :id FOR UPDATE"
+            ),
+            {"id": admin_user_id},
+        ).first()
+        if (
+            admin is None
+            or admin.role != "system_admin"
+            or admin.status != "active"
+        ):
+            raise PermissionError(
+                "Administrator access was lost. Nothing was changed."
+            )
+        if inserts:
+            session.execute(
+                text(
+                    "INSERT INTO public.users (full_name, email, password_hash, role, status) VALUES (:name, :email, :hash, 'student', 'active')"
+                ),
+                inserts,
+            )
+        if updates:
+            session.execute(
+                text(
+                    "UPDATE public.users SET status = 'active', password_hash = :hash WHERE id = :id AND status IN ('pending', 'rejected')"
+                ),
+                updates,
+            )
+    return results
 
 
 def seed_system_admin(full_name: str, email: str, password: str) -> User:

@@ -1,6 +1,7 @@
 import reflex as rx
 
 from UniFlow_.states.admin_state import AdminState, ApprovedUser, PendingRequest
+from UniFlow_.components.bulk_email_import import bulk_email_import
 
 
 def request_row(request: PendingRequest) -> rx.Component:
@@ -146,6 +147,7 @@ def admin_dashboard() -> rx.Component:
             ),
             class_name="py-9 sm:py-12",
         ),
+        bulk_email_import(),
         rx.el.section(
             rx.el.div(
                 rx.el.div(
