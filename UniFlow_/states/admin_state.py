@@ -8,6 +8,7 @@ from UniFlow_.user_services import (
     activate_user,
     change_pending_user_role,
     get_user_by_id,
+    list_active_users,
     list_pending_users,
     reject_user,
 )
@@ -24,8 +25,17 @@ class PendingRequest(TypedDict):
     date_iso: str
 
 
+class ApprovedUser(TypedDict):
+    id: int
+    full_name: str
+    email: str
+    role: str
+
+
 class AdminState(rx.State):
     requests: list[PendingRequest] = []
+    approved_users: list[ApprovedUser] = []
+    approved_error: bool = False
     loading: bool = False
     message: str = ""
     error: bool = False
@@ -39,6 +49,8 @@ class AdminState(rx.State):
     def _clear_access(self):
         self._authorized = False
         self.requests = []
+        self.approved_users = []
+        self.approved_error = False
         self.message = ""
         self.error = False
         self.loading = False
@@ -74,6 +86,9 @@ class AdminState(rx.State):
         if not await self._authorize():
             return False
         self.requests = []
+        self.approved_users = []
+        self.error = False
+        self.approved_error = False
         try:
             users = await asyncio.to_thread(list_pending_users)
             self.requests = [
@@ -89,12 +104,35 @@ class AdminState(rx.State):
             ]
             self.revision += 1
         except Exception as e:
-            logging.exception("Unexpected error")
-            logging.error("Error: %s", type(e).__name__)
+            logging.exception(f"Error: {e}")
             self.error = True
             self.message = (
                 "Requests could not be loaded. Please refresh and try again."
             )
+        try:
+            users = await asyncio.to_thread(list_active_users)
+            role_labels = {
+                "system_admin": "System admin",
+                "program_admin": "Program admin",
+                "faculty": "Faculty",
+                "student": "Student",
+                "sponsor": "Sponsor",
+            }
+            self.approved_users = [
+                ApprovedUser(
+                    id=int(user.id),
+                    full_name=str(user.full_name),
+                    email=str(user.email),
+                    role=role_labels.get(
+                        user.role, user.role.replace("_", " ").title()
+                    ),
+                )
+                for user in users
+            ]
+        except Exception as e:
+            logging.exception(f"Error: {e}")
+            self.approved_users = []
+            self.approved_error = True
         return True
 
     @rx.event
