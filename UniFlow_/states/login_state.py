@@ -28,12 +28,14 @@ class LoginState(rx.State):
         self.password_revision += 1
 
     async def _clear_dashboard_access(self):
+        from UniFlow_.states.admin_state import AdminState
         from UniFlow_.states.student_state import StudentState
         from UniFlow_.states.faculty_state import FacultyState
         from UniFlow_.states.program_admin_state import ProgramAdminState
         from UniFlow_.states.sponsor_state import SponsorState
 
         for state_class in (
+            AdminState,
             StudentState,
             FacultyState,
             ProgramAdminState,
@@ -41,6 +43,20 @@ class LoginState(rx.State):
         ):
             dashboard = await self.get_state(state_class)
             dashboard._clear_access()
+
+    @rx.event
+    def redirect_signed_in_user(self):
+        if self.signed_in:
+            routes = {
+                "student": "/student",
+                "faculty": "/faculty",
+                "program_admin": "/programadmin",
+                "sponsor": "/sponsor",
+                "system_admin": "/admin",
+            }
+            if self._session_user_id > 0 and self.role in routes:
+                return rx.redirect(routes[self.role])
+            self._clear_session()
 
     @rx.event
     def clear_feedback(self):

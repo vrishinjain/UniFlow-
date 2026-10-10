@@ -1,13 +1,20 @@
 import reflex as rx
 
 import asyncio
+import csv
+import io
 from typing import TypedDict
 
 from UniFlow_.states.login_state import LoginState
 from UniFlow_.user_services import (
     activate_user,
+    BULK_EMAIL_MAX_BYTES,
+    BulkEmailResult,
+    bulk_approve_emails,
+    parse_bulk_email_file,
     change_pending_user_role,
     get_user_by_id,
+    list_active_users,
     list_pending_users,
     reject_user,
 )
@@ -24,21 +31,65 @@ class PendingRequest(TypedDict):
     date_iso: str
 
 
+class ApprovedUser(TypedDict):
+    id: int
+    full_name: str
+    email: str
+    role: str
+
+
 class AdminState(rx.State):
     requests: list[PendingRequest] = []
+    approved_users: list[ApprovedUser] = []
+    approved_error: bool = False
     loading: bool = False
     message: str = ""
     error: bool = False
     revision: int = 0
     _authorized: bool = False
+    _bulk_results: list[BulkEmailResult] = []
+    import_message: str = ""
+    import_error: bool = False
+    importing: bool = False
+
+    @rx.var
+    def bulk_results(self) -> list[BulkEmailResult]:
+        return self._bulk_results if self._authorized else []
+
+    @rx.var
+    def has_issued_passwords(self) -> bool:
+        return self._authorized and any(
+            row["password"] and row["outcome"] in {"Created", "Reactivated"}
+            for row in self._bulk_results
+        )
+
+    @rx.var
+    def already_approved_count(self) -> int:
+        return (
+            sum(
+                row["outcome"] == "Already approved"
+                for row in self._bulk_results
+            )
+            if self._authorized
+            else 0
+        )
 
     @rx.var
     def authorized(self) -> bool:
         return self._authorized
 
+    def _clear_import(self):
+        self._bulk_results = []
+        self.import_message = ""
+        self.import_error = False
+
     def _clear_access(self):
+        self._clear_import()
+        self.importing = False
         self._authorized = False
         self.requests = []
+        self.approved_users = []
+        self.approved_error = False
         self.message = ""
         self.error = False
         self.loading = False
@@ -74,6 +125,9 @@ class AdminState(rx.State):
         if not await self._authorize():
             return False
         self.requests = []
+        self.approved_users = []
+        self.error = False
+        self.approved_error = False
         try:
             users = await asyncio.to_thread(list_pending_users)
             self.requests = [
@@ -89,12 +143,35 @@ class AdminState(rx.State):
             ]
             self.revision += 1
         except Exception as e:
-            logging.exception("Unexpected error")
-            logging.error("Error: %s", type(e).__name__)
+            logging.exception(f"Error: {e}")
             self.error = True
             self.message = (
                 "Requests could not be loaded. Please refresh and try again."
             )
+        try:
+            users = await asyncio.to_thread(list_active_users)
+            role_labels = {
+                "system_admin": "System admin",
+                "program_admin": "Program admin",
+                "faculty": "Faculty",
+                "student": "Student",
+                "sponsor": "Sponsor",
+            }
+            self.approved_users = [
+                ApprovedUser(
+                    id=int(user.id),
+                    full_name=str(user.full_name),
+                    email=str(user.email),
+                    role=role_labels.get(
+                        user.role, user.role.replace("_", " ").title()
+                    ),
+                )
+                for user in users
+            ]
+        except Exception as e:
+            logging.exception(f"Error: {e}")
+            self.approved_users = []
+            self.approved_error = True
         return True
 
     @rx.event
@@ -183,6 +260,95 @@ class AdminState(rx.State):
                 yield rx.redirect("/")
         finally:
             self.loading = False
+
+    @rx.event
+    async def download_passwords(self):
+        if not await self._authorize():
+            return rx.redirect("/")
+        if self.loading:
+            return
+        rows = [
+            (row["email"], row["password"])
+            for row in self._bulk_results
+            if row["password"] and row["outcome"] in {"Created", "Reactivated"}
+        ]
+        if not rows:
+            self.import_error = True
+            self.import_message = (
+                "No newly issued passwords are available to download."
+            )
+            return
+        with io.StringIO(newline="") as output:
+            writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+            writer.writerow(("email", "password"))
+            writer.writerows(rows)
+            data = output.getvalue().encode("utf-8")
+        return rx.download(data=data, filename="uniflow_passwords.csv")
+
+    @rx.event
+    def dismiss_import_results(self):
+        self._clear_import()
+
+    @rx.event
+    async def import_emails(self, files: list[rx.UploadFile]):
+        self._clear_import()
+        if self.loading:
+            self.import_error = True
+            self.import_message = (
+                "Wait for the current operation to finish, then try again."
+            )
+            yield rx.clear_selected_files("admin_bulk_emails")
+            return
+        self.loading = True
+        self.importing = True
+        self.import_message = "Validating the file and preparing accounts… Larger imports may take several minutes."
+        yield
+        results: list[BulkEmailResult] = []
+        try:
+            if not await self._authorize():
+                yield rx.redirect("/")
+                return
+            if len(files) != 1:
+                raise ValueError(
+                    "Choose exactly one .txt or .csv file. Nothing was changed."
+                )
+            file = files[0]
+            data = await file.read(BULK_EMAIL_MAX_BYTES + 1)
+            addresses = parse_bulk_email_file(file.name or "", data)
+            login = await self.get_state(LoginState)
+            results = await asyncio.to_thread(
+                bulk_approve_emails, login._session_user_id, addresses
+            )
+            if not await self._refresh():
+                results.clear()
+                yield rx.redirect("/")
+                return
+            self._bulk_results = results
+            created = sum(row["outcome"] == "Created" for row in results)
+            reactivated = sum(
+                row["outcome"] == "Reactivated" for row in results
+            )
+            unchanged = sum(
+                row["outcome"] == "Already approved" for row in results
+            )
+            self.import_message = f"Import complete: {created} created, {reactivated} reactivated, {unchanged} already approved (unchanged)."
+            if self.error or self.approved_error:
+                self.import_message = f"{self.import_message} Accounts were saved, but a dashboard list could not refresh. Use Refresh; keep these credentials before leaving."
+        except PermissionError as e:
+            logging.exception(f"Error: {e}")
+            self._clear_access()
+            yield rx.redirect("/")
+        except ValueError as e:
+            self.import_error = True
+            self.import_message = str(e)
+        except Exception as e:
+            logging.exception(f"Error: {e}")
+            self.import_error = True
+            self.import_message = "The import could not be completed. No accounts were changed. Please try again."
+        finally:
+            self.loading = False
+            self.importing = False
+            yield rx.clear_selected_files("admin_bulk_emails")
 
     @rx.event
     async def logout(self):

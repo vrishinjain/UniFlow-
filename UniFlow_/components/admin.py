@@ -1,6 +1,7 @@
 import reflex as rx
 
-from UniFlow_.states.admin_state import AdminState, PendingRequest
+from UniFlow_.states.admin_state import AdminState, ApprovedUser, PendingRequest
+from UniFlow_.components.bulk_email_import import bulk_email_import
 
 
 def request_row(request: PendingRequest) -> rx.Component:
@@ -87,6 +88,28 @@ def request_row(request: PendingRequest) -> rx.Component:
     )
 
 
+def approved_user_row(user: ApprovedUser) -> rx.Component:
+    return rx.el.li(
+        rx.el.div(
+            rx.el.h3(
+                user["full_name"],
+                class_name="break-words text-sm font-semibold text-[#172B3D]",
+            ),
+            rx.el.p(
+                user["email"],
+                class_name="mt-1 break-all text-sm text-[#667078]",
+            ),
+            class_name="min-w-0 flex-1",
+        ),
+        rx.el.span(
+            user["role"],
+            class_name="w-fit shrink-0 rounded-full bg-[#EAF3EF] px-3 py-1 text-xs font-semibold text-[#246D67]",
+        ),
+        key=user["id"],
+        class_name="flex items-center justify-between gap-4 border-b border-[#E9EBE6] px-5 py-4 last:border-b-0 sm:px-6",
+    )
+
+
 def admin_dashboard() -> rx.Component:
     return rx.el.div(
         rx.el.header(
@@ -124,6 +147,7 @@ def admin_dashboard() -> rx.Component:
             ),
             class_name="py-9 sm:py-12",
         ),
+        bulk_email_import(),
         rx.el.section(
             rx.el.div(
                 rx.el.div(
@@ -209,6 +233,77 @@ def admin_dashboard() -> rx.Component:
             ),
             custom_attrs={"aria-busy": AdminState.loading},
             class_name="w-full overflow-hidden rounded-2xl border border-[#E2E4DC] bg-white",
+        ),
+        rx.el.section(
+            rx.el.div(
+                rx.el.div(
+                    rx.el.h2(
+                        "Approved users",
+                        class_name="text-lg font-semibold text-[#172B3D]",
+                    ),
+                    rx.el.p(
+                        "Accounts with active access, including system administrators.",
+                        class_name="mt-1 text-xs leading-5 text-[#667078]",
+                    ),
+                ),
+                class_name="border-b border-[#E9EBE6] p-5 sm:p-6",
+            ),
+            rx.cond(
+                AdminState.loading,
+                rx.el.div(
+                    rx.el.p(
+                        "Loading approved users…",
+                        class_name="text-sm text-[#667078]",
+                    ),
+                    rx.el.div(
+                        class_name="mt-4 h-16 animate-pulse rounded-lg bg-[#F5F5F1]"
+                    ),
+                    role="status",
+                    class_name="p-6",
+                ),
+                rx.cond(
+                    AdminState.approved_error,
+                    rx.el.div(
+                        rx.el.h3(
+                            "Approved users unavailable",
+                            class_name="text-base font-semibold text-[#172B3D]",
+                        ),
+                        rx.el.p(
+                            "Use Refresh to try loading the list again.",
+                            class_name="mt-2 text-sm text-[#667078]",
+                        ),
+                        role="status",
+                        class_name="px-6 py-10 text-center",
+                    ),
+                    rx.cond(
+                        AdminState.approved_users.length() > 0,
+                        rx.el.ul(
+                            rx.foreach(
+                                AdminState.approved_users, approved_user_row
+                            ),
+                            class_name="m-0 w-full list-none p-0",
+                        ),
+                        rx.el.div(
+                            rx.el.span(
+                                "✓",
+                                custom_attrs={"aria-hidden": "true"},
+                                class_name="mx-auto block text-2xl leading-7 text-[#28766F]",
+                            ),
+                            rx.el.h3(
+                                "No approved users yet",
+                                class_name="mt-3 text-base font-semibold text-[#172B3D]",
+                            ),
+                            rx.el.p(
+                                "Active accounts will appear here.",
+                                class_name="mt-2 text-sm text-[#667078]",
+                            ),
+                            class_name="px-6 py-10 text-center",
+                        ),
+                    ),
+                ),
+            ),
+            custom_attrs={"aria-busy": AdminState.loading},
+            class_name="mt-6 w-full overflow-hidden rounded-2xl border border-[#E2E4DC] bg-white",
         ),
         rx.el.footer(
             "One university. Your connection.",
