@@ -388,7 +388,7 @@ def parse_bulk_email_file(filename: str, data: bytes) -> list[str]:
 def _temporary_password() -> str:
     alphabet = f"{string.ascii_letters}{string.digits}!@#$%&*-_"
     while True:
-        password = "".join(secrets.choice(alphabet) for _ in range(24))
+        password = "".join(secrets.choice(alphabet) for _ in range(12))
         if (
             any(c.islower() for c in password)
             and any(c.isupper() for c in password)
@@ -433,6 +433,7 @@ def bulk_approve_emails(
         existing = {str(row.email): row for row in rows}
         inserts: list[dict[str, str]] = []
         updates: list[dict[str, str | int]] = []
+        issued_passwords: set[str] = set()
         for email in emails:
             user = existing.get(email)
             if user is not None and user.status == "active":
@@ -447,6 +448,9 @@ def bulk_approve_emails(
                     "An account has an unsupported status. Nothing was changed."
                 )
             password = _temporary_password()
+            while password in issued_passwords:
+                password = _temporary_password()
+            issued_passwords.add(password)
             password_hash = _hash_password(password)
             if user is None:
                 local = email.partition("@")[0]

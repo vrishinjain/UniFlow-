@@ -1,6 +1,8 @@
 import reflex as rx
 
 import asyncio
+import csv
+import io
 from typing import TypedDict
 
 from UniFlow_.states.login_state import LoginState
@@ -53,6 +55,13 @@ class AdminState(rx.State):
     @rx.var
     def bulk_results(self) -> list[BulkEmailResult]:
         return self._bulk_results if self._authorized else []
+
+    @rx.var
+    def has_issued_passwords(self) -> bool:
+        return self._authorized and any(
+            row["password"] and row["outcome"] in {"Created", "Reactivated"}
+            for row in self._bulk_results
+        )
 
     @rx.var
     def already_approved_count(self) -> int:
@@ -251,6 +260,30 @@ class AdminState(rx.State):
                 yield rx.redirect("/")
         finally:
             self.loading = False
+
+    @rx.event
+    async def download_passwords(self):
+        if not await self._authorize():
+            return rx.redirect("/")
+        if self.loading:
+            return
+        rows = [
+            (row["email"], row["password"])
+            for row in self._bulk_results
+            if row["password"] and row["outcome"] in {"Created", "Reactivated"}
+        ]
+        if not rows:
+            self.import_error = True
+            self.import_message = (
+                "No newly issued passwords are available to download."
+            )
+            return
+        with io.StringIO(newline="") as output:
+            writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+            writer.writerow(("email", "password"))
+            writer.writerows(rows)
+            data = output.getvalue().encode("utf-8")
+        return rx.download(data=data, filename="uniflow_passwords.csv")
 
     @rx.event
     def dismiss_import_results(self):

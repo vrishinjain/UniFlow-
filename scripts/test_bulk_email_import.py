@@ -1,12 +1,16 @@
 import reflex as rx
 
 import copy
+import csv
+import io
 import unittest
+from pathlib import Path
 from contextlib import contextmanager
-from types import SimpleNamespace
-from unittest.mock import patch
+from types import MethodType, SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 from UniFlow_ import user_services as services
+from UniFlow_.states.admin_state import AdminState
 
 
 class FakeSession:
@@ -246,9 +250,31 @@ class BulkImportTests(unittest.TestCase):
                     1, ["duplicate@example.edu", " duplicate@example.edu "]
                 )
 
+    def test_password_collision_is_regenerated(self):
+        with (
+            patch.object(
+                services,
+                "_temporary_password",
+                side_effect=["Abc123!defGH", "Abc123!defGH", "Xyz456@ijkLM"],
+            ),
+            patch.object(services, "_hash_password", return_value="hash"),
+        ):
+            results = services.bulk_approve_emails(
+                1, ["new@example.edu", "pending@example.edu"]
+            )
+        self.assertEqual(len({row["password"] for row in results}), 2)
+
+    def test_sample_file_is_valid_utf8_upload(self):
+        path = (
+            Path(__file__).resolve().parents[1] / "assets" / "sample_emails.txt"
+        )
+        addresses = services.parse_bulk_email_file(path.name, path.read_bytes())
+        self.assertEqual(len(addresses), 3)
+        self.assertEqual(len(set(addresses)), 3)
+
     def test_real_password_strength_and_bcrypt(self):
         password = services._temporary_password()
-        self.assertEqual(len(password), 24)
+        self.assertEqual(len(password), 12)
         self.assertTrue(any(c.islower() for c in password))
         self.assertTrue(any(c.isupper() for c in password))
         self.assertTrue(any(c.isdigit() for c in password))
@@ -256,6 +282,126 @@ class BulkImportTests(unittest.TestCase):
         hashed = services._hash_password(password)
         self.assertNotEqual(hashed, password)
         self.assertTrue(services.verify_password(password, hashed))
+
+
+class PasswordDownloadTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.login = SimpleNamespace(
+            _session_user_id=1,
+            _clear_session=lambda: setattr(self.login, "_session_user_id", 0),
+        )
+        self.state = SimpleNamespace(
+            _authorized=True,
+            loading=False,
+            import_error=False,
+            import_message="",
+            _bulk_results=[
+                {
+                    "email": "new@example.org",
+                    "password": 'Ab1!comma,"é',
+                    "outcome": "Created",
+                },
+                {
+                    "email": "pending@example.org",
+                    "password": "Cd2@efGH3456",
+                    "outcome": "Reactivated",
+                },
+                {
+                    "email": "active@example.org",
+                    "password": "",
+                    "outcome": "Already approved",
+                },
+                {
+                    "email": "excluded@example.org",
+                    "password": "not-issued",
+                    "outcome": "Already approved",
+                },
+            ],
+            get_state=AsyncMock(return_value=self.login),
+        )
+        self.state._authorize = MethodType(AdminState._authorize, self.state)
+        self.state._clear_access = self.clear_access
+        self.user = SimpleNamespace(role="system_admin", status="active")
+        self.lookup = patch(
+            "UniFlow_.states.admin_state.get_user_by_id", return_value=self.user
+        ).start()
+        self.addCleanup(patch.stopall)
+        self.engine = patch.object(
+            services,
+            "_get_engine",
+            side_effect=AssertionError("Live database access forbidden"),
+        ).start()
+
+    def clear_access(self):
+        self.state._authorized = False
+        self.state._bulk_results = []
+
+    async def test_download_quotes_utf8_and_retains_credentials(self):
+        before = copy.deepcopy(self.state._bulk_results)
+        with patch("UniFlow_.states.admin_state.rx.download") as download:
+            await AdminState.download_passwords.fn(self.state)
+        self.lookup.assert_called_once_with(1)
+        download.assert_called_once()
+        data = download.call_args.kwargs["data"]
+        self.assertIsInstance(data, bytes)
+        rows = list(csv.reader(io.StringIO(data.decode("utf-8"), newline="")))
+        self.assertEqual(
+            rows,
+            [
+                ["email", "password"],
+                ["new@example.org", 'Ab1!comma,"é'],
+                ["pending@example.org", "Cd2@efGH3456"],
+            ],
+        )
+        self.assertTrue(data.startswith(b'"email","password"\r\n'))
+        self.assertEqual(self.state._bulk_results, before)
+        self.assertEqual(
+            download.call_args.kwargs["filename"], "uniflow_passwords.csv"
+        )
+        self.assertNotIn("url", download.call_args.kwargs)
+
+    async def test_revoked_or_missing_identity_never_downloads(self):
+        for user in (
+            None,
+            SimpleNamespace(role="student", status="active"),
+            SimpleNamespace(role="system_admin", status="pending"),
+            SimpleNamespace(role="system_admin", status="rejected"),
+        ):
+            with self.subTest(user=user):
+                self.login._session_user_id = 1
+                self.state._authorized = True
+                self.lookup.return_value = user
+                with patch(
+                    "UniFlow_.states.admin_state.rx.download"
+                ) as download:
+                    await AdminState.download_passwords.fn(self.state)
+                download.assert_not_called()
+                self.assertFalse(self.state._authorized)
+                self.assertEqual(self.state._bulk_results, [])
+        self.login._session_user_id = 0
+        self.lookup.reset_mock()
+        with patch("UniFlow_.states.admin_state.rx.download") as download:
+            await AdminState.download_passwords.fn(self.state)
+        self.lookup.assert_not_called()
+        download.assert_not_called()
+
+    async def test_no_issued_passwords_never_downloads(self):
+        self.state._bulk_results = [self.state._bulk_results[2]]
+        with patch("UniFlow_.states.admin_state.rx.download") as download:
+            await AdminState.download_passwords.fn(self.state)
+        download.assert_not_called()
+        self.assertTrue(self.state.import_error)
+
+    async def test_verification_failure_never_downloads(self):
+        self.lookup.side_effect = RuntimeError("Verification unavailable")
+        with (
+            patch("UniFlow_.states.admin_state.rx.download") as download,
+            patch("UniFlow_.states.admin_state.logging.exception"),
+        ):
+            await AdminState.download_passwords.fn(self.state)
+        download.assert_not_called()
+        self.assertFalse(self.state._authorized)
+        self.assertEqual(self.state._bulk_results, [])
 
 
 if __name__ == "__main__":

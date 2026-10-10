@@ -74,6 +74,13 @@ def bulk_email_import() -> rx.Component:
                 "One email per line, with an optional first row of ‘email’. Matching is case-sensitive; surrounding spaces are trimmed. Invalid rows or duplicates reject the entire file before any changes.",
                 class_name="mt-3 text-xs leading-5 text-[#667078]",
             ),
+            rx.el.a(
+                rx.icon("download", class_name="h-4 w-4"),
+                "Download sample file",
+                href="/sample_emails.txt",
+                download="sample_emails.txt",
+                class_name="mt-3 flex w-fit items-center gap-2 rounded-lg text-xs font-semibold text-[#246D67] underline underline-offset-4 hover:text-[#1C5752] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F]",
+            ),
             rx.el.div(
                 rx.foreach(
                     rx.selected_files("admin_bulk_emails"),
@@ -141,11 +148,35 @@ def bulk_email_import() -> rx.Component:
                         f"Already approved: {AdminState.already_approved_count} — no new password issued.",
                         class_name="mt-2 text-xs font-medium text-[#246D67]",
                     ),
-                    rx.el.button(
-                        "Dismiss credentials",
-                        type="button",
-                        on_click=AdminState.dismiss_import_results,
-                        class_name="mt-3 rounded-lg border border-[#D9DEDC] bg-white px-3 py-2 text-xs font-semibold text-[#246D67] hover:bg-[#F0F6F3] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F]",
+                    rx.cond(
+                        AdminState.has_issued_passwords,
+                        rx.el.p(
+                            "The downloaded CSV contains sensitive passwords. Store it securely and share it only through a secure channel with the intended account holders; delete it when no longer needed.",
+                            class_name="mt-2 text-xs leading-5 text-[#667078]",
+                        ),
+                        rx.fragment(),
+                    ),
+                    rx.el.div(
+                        rx.cond(
+                            AdminState.has_issued_passwords,
+                            rx.el.button(
+                                rx.icon("download", class_name="h-4 w-4"),
+                                "Download passwords",
+                                type="button",
+                                on_click=AdminState.download_passwords,
+                                disabled=AdminState.loading
+                                | ~AdminState.authorized,
+                                class_name="flex items-center gap-2 rounded-lg bg-[#246D67] px-3 py-2 text-xs font-semibold text-white hover:bg-[#1C5752] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F] disabled:cursor-not-allowed disabled:bg-[#548B85]",
+                            ),
+                            rx.fragment(),
+                        ),
+                        rx.el.button(
+                            "Dismiss credentials",
+                            type="button",
+                            on_click=AdminState.dismiss_import_results,
+                            class_name="rounded-lg border border-[#D9DEDC] bg-white px-3 py-2 text-xs font-semibold text-[#246D67] hover:bg-[#F0F6F3] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F]",
+                        ),
+                        class_name="mt-3 flex flex-wrap items-center gap-3",
                     ),
                     class_name="border-b border-[#E9EBE6] p-5 sm:p-6",
                 ),
