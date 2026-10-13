@@ -28,12 +28,14 @@ class LoginState(rx.State):
         self.password_revision += 1
 
     async def _clear_dashboard_access(self):
+        from UniFlow_.states.admin_state import AdminState
         from UniFlow_.states.student_state import StudentState
         from UniFlow_.states.faculty_state import FacultyState
         from UniFlow_.states.program_admin_state import ProgramAdminState
         from UniFlow_.states.sponsor_state import SponsorState
 
         for state_class in (
+            AdminState,
             StudentState,
             FacultyState,
             ProgramAdminState,
