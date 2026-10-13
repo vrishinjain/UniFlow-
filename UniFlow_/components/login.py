@@ -97,54 +97,15 @@ def login_form() -> rx.Component:
             on_focus=LoginState.clear_feedback,
             custom_attrs={"aria-busy": LoginState.loading},
         ),
-            rx.el.p(
-                "Don't have an account? ",
-                rx.el.a(
-                    "Request one",
-                    href="/signup",
-                    class_name="font-semibold text-[#246D67] underline hover:text-[#1C5752]",
-                ),
+        rx.el.p(
+            "Don't have an account? ",
+            rx.el.a(
+                "Request one",
+                href="/signup",
+                class_name="font-semibold text-[#246D67] underline hover:text-[#1C5752]",
+            ),
             class_name="mt-6 border-t border-[#E9EBE6] pt-5 text-center text-sm leading-5 text-[#737C81]",
         ),
-        class_name="w-full rounded-2xl border border-[#E2E4DC] bg-white p-7 sm:p-9",
-    )
-
-
-def signed_in_card() -> rx.Component:
-    return rx.el.section(
-        rx.el.span(
-            "✓",
-            custom_attrs={"aria-hidden": "true"},
-            class_name="mb-6 inline-flex h-11 w-11 items-center justify-center rounded-full bg-[#EAF3EF] text-xl text-[#246D67]",
-        ),
-        rx.el.p(
-            "SIGNED IN",
-            class_name="text-[11px] font-semibold tracking-[0.18em] text-[#28766F]",
-        ),
-        rx.el.h1(
-            rx.cond(
-                LoginState.full_name != "",
-                f"Welcome, {LoginState.full_name}",
-                "Welcome to UniFlow",
-            ),
-            class_name="mt-3 break-words text-2xl font-semibold tracking-tight text-[#172B3D]",
-        ),
-        rx.el.p(
-            "You’re signed in to your university account.",
-            class_name="mt-3 text-sm leading-6 text-[#667078]",
-        ),
-        rx.el.p(
-            LoginState.email,
-            class_name="mt-4 break-all rounded-lg bg-[#F6F7F3] px-4 py-3 text-sm text-[#172B3D]",
-        ),
-        rx.el.button(
-            "Sign out",
-            type="button",
-            on_click=LoginState.sign_out,
-            class_name="mt-7 h-12 w-full rounded-lg border border-[#BFCFC9] bg-white text-sm font-semibold text-[#246D67] transition-colors hover:bg-[#F0F6F3] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F]",
-        ),
-        role="status",
-        custom_attrs={"aria-live": "polite"},
         class_name="w-full rounded-2xl border border-[#E2E4DC] bg-white p-7 sm:p-9",
     )
 
@@ -163,7 +124,7 @@ def identity_portal() -> rx.Component:
                 ),
                 class_name="mb-9 text-center",
             ),
-            rx.cond(LoginState.signed_in, signed_in_card(), login_form()),
+            login_form(),
             rx.el.footer(
                 "One university. Your connection.",
                 class_name="mt-7 text-center text-xs tracking-wide text-[#7B8385]",
