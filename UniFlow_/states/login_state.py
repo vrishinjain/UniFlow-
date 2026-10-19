@@ -8,11 +8,21 @@ from UniFlow_.user_services import get_user_by_email, verify_password
 import logging
 
 
+DASHBOARD_ROUTES = {
+    "student": "/student",
+    "faculty": "/faculty",
+    "program_admin": "/programadmin",
+    "sponsor": "/sponsor",
+    "system_admin": "/admin",
+}
+
+
 class LoginState(rx.State):
     email: str = ""
     full_name: str = ""
     role: str = ""
     signed_in: bool = False
+    must_change_password: bool = False
     loading: bool = False
     message: str = ""
     password_revision: int = 0
@@ -21,6 +31,7 @@ class LoginState(rx.State):
     def _clear_session(self):
         self._session_user_id = 0
         self.signed_in = False
+        self.must_change_password = False
         self.full_name = ""
         self.role = ""
         self.email = ""
@@ -47,15 +58,10 @@ class LoginState(rx.State):
     @rx.event
     def redirect_signed_in_user(self):
         if self.signed_in:
-            routes = {
-                "student": "/student",
-                "faculty": "/faculty",
-                "program_admin": "/programadmin",
-                "sponsor": "/sponsor",
-                "system_admin": "/admin",
-            }
-            if self._session_user_id > 0 and self.role in routes:
-                return rx.redirect(routes[self.role])
+            if self._session_user_id > 0 and self.must_change_password:
+                return rx.redirect("/set-password")
+            if self._session_user_id > 0 and self.role in DASHBOARD_ROUTES:
+                return rx.redirect(DASHBOARD_ROUTES[self.role])
             self._clear_session()
 
     @rx.event
@@ -104,15 +110,13 @@ class LoginState(rx.State):
                     self.email = str(user.email)
                     self._session_user_id = int(user.id)
                     self.signed_in = True
-                    routes = {
-                        "student": "/student",
-                        "faculty": "/faculty",
-                        "program_admin": "/programadmin",
-                        "sponsor": "/sponsor",
-                        "system_admin": "/admin",
-                    }
-                    if user.role in routes:
-                        yield rx.redirect(routes[user.role])
+                    self.must_change_password = bool(
+                        user.must_change_password
+                    )
+                    if self.must_change_password:
+                        yield rx.redirect("/set-password")
+                    elif user.role in DASHBOARD_ROUTES:
+                        yield rx.redirect(DASHBOARD_ROUTES[user.role])
                 case _:
                     self.message = "Invalid email or password"
         except Exception as exc:

@@ -28,6 +28,9 @@ class SponsorState(rx.State):
         if not login.signed_in or session_id <= 0 or login.role != "sponsor":
             yield rx.redirect("/")
             return
+        if login.must_change_password:
+            yield rx.redirect("/set-password")
+            return
         try:
             account = await asyncio.to_thread(get_user_by_id, session_id)
         except Exception as e:

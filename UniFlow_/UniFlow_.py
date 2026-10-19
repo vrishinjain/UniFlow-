@@ -13,6 +13,8 @@ from UniFlow_.states.student_state import StudentState
 from UniFlow_.states.faculty_state import FacultyState
 from UniFlow_.states.program_admin_state import ProgramAdminState
 from UniFlow_.states.sponsor_state import SponsorState
+from UniFlow_.components.set_password import set_password_portal
+from UniFlow_.states.set_password_state import SetPasswordState
 
 
 def index() -> rx.Component:
@@ -86,4 +88,11 @@ app.add_page(
     route="/sponsor",
     title="Sponsor Dashboard · UniFlow",
     on_load=SponsorState.load_sponsor,
+)
+
+app.add_page(
+    set_password_portal,
+    route="/set-password",
+    title="Set your password · UniFlow",
+    on_load=SetPasswordState.load_set_password,
 )
