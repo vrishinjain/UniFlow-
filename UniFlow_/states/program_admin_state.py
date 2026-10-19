@@ -1,10 +1,7 @@
 import reflex as rx
 
-import asyncio
-import logging
-
 from UniFlow_.states.login_state import LoginState
-from UniFlow_.user_services import get_user_by_id
+from UniFlow_.states.role_guard import check_dashboard_access
 
 
 class ProgramAdminState(rx.State):
@@ -23,34 +20,9 @@ class ProgramAdminState(rx.State):
     async def load_program_admin(self):
         self._clear_access()
         yield
-        login = await self.get_state(LoginState)
-        session_id = login._session_user_id
-        if (
-            not login.signed_in
-            or session_id <= 0
-            or login.role != "program_admin"
-        ):
-            yield rx.redirect("/")
-            return
-        if login.must_change_password:
-            yield rx.redirect("/set-password")
-            return
-        try:
-            account = await asyncio.to_thread(get_user_by_id, session_id)
-        except Exception as e:
-            logging.exception(f"Error: {e}")
-            yield rx.redirect("/")
-            return
-        if (
-            account is None
-            or account.status != "active"
-            or account.id != session_id
-            or account.role != "program_admin"
-            or not login.signed_in
-            or login._session_user_id != session_id
-            or login.role != "program_admin"
-        ):
-            yield rx.redirect("/")
+        account, redirect_to = await check_dashboard_access(self, "program_admin")
+        if account is None:
+            yield rx.redirect(redirect_to)
             return
         self.full_name = str(account.full_name).strip()
         self._authorized = True
