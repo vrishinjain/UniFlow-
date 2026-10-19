@@ -129,7 +129,6 @@ def project_submission() -> rx.Component:
                     multiple=True,
                     max_files=3,
                     max_size=MAX_FILE_BYTES,
-                    on_drop=SponsorState.clear_upload_error,
                     accept={
                         "application/pdf": [".pdf", ".PDF"],
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
