@@ -33,6 +33,7 @@ __all__ = [
     "activate_user",
     "reject_user",
     "seed_system_admin",
+    "set_new_password",
     "parse_bulk_email_file",
     "bulk_approve_emails",
 ]
@@ -174,7 +175,7 @@ def get_user_by_id(user_id: int) -> User | None:
         user = session.scalar(
             select(User).from_statement(
                 text(
-                    "SELECT id, full_name, email, password_hash, role, status, created_at "
+                    "SELECT id, full_name, email, password_hash, role, status, created_at, must_change_password "
                     "FROM public.users WHERE id = :user_id LIMIT 1"
                 )
             ),
@@ -197,6 +198,25 @@ def verify_password(password: str, password_hash: str) -> bool:
     except (ValueError, TypeError, UnicodeError):
         logging.exception("Unexpected error")
         return False
+
+
+def set_new_password(user_id: int, new_password: str) -> None:
+    """Replace a temporary password and clear the first-login flag."""
+    _validate_user_id(user_id)
+    if not isinstance(new_password, str) or len(new_password) < 8:
+        raise ValueError("Password must be at least 8 characters.")
+    with _transaction() as session:
+        user = session.scalar(
+            select(User).where(User.id == user_id).with_for_update()
+        )
+        if user is None or user.status != "active":
+            raise PermissionError("This account is not active.")
+        if verify_password(new_password, user.password_hash):
+            raise ValueError(
+                "Choose a password different from your temporary one."
+            )
+        user.password_hash = _hash_password(new_password)
+        user.must_change_password = False
 
 
 def list_pending_users() -> list[User]:
@@ -483,14 +503,14 @@ def bulk_approve_emails(
         if inserts:
             session.execute(
                 text(
-                    "INSERT INTO public.users (full_name, email, password_hash, role, status) VALUES (:name, :email, :hash, 'student', 'active')"
+                    "INSERT INTO public.users (full_name, email, password_hash, role, status, must_change_password) VALUES (:name, :email, :hash, 'student', 'active', true)"
                 ),
                 inserts,
             )
         if updates:
             session.execute(
                 text(
-                    "UPDATE public.users SET status = 'active', password_hash = :hash WHERE id = :id AND status IN ('pending', 'rejected')"
+                    "UPDATE public.users SET status = 'active', password_hash = :hash, must_change_password = true WHERE id = :id AND status IN ('pending', 'rejected')"
                 ),
                 updates,
             )
