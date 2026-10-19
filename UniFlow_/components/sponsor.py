@@ -1,59 +1,49 @@
 import reflex as rx
 
+from UniFlow_.components.dashboard_layout import (
+    NavItem,
+    coming_soon,
+    dashboard_layout,
+    home_content,
+)
 from UniFlow_.states.sponsor_state import SponsorState
 
+# Sidebar options for this role. The first item is the dashboard home.
+SPONSOR_NAV = [
+    NavItem("Home", "house", "/sponsor", "Overview of your sponsor workspace."),
+    NavItem("Submit project", "file-plus", "/sponsor/submit", "Propose a new project with a description and files."),
+    NavItem("My projects", "folder", "/sponsor/projects", "Track the projects you have submitted."),
+]
 
-def sponsor_welcome_card() -> rx.Component:
-    return rx.el.section(
-        rx.icon("handshake", class_name="mb-6 h-8 w-8 text-[#246D67]"),
-        rx.el.p(
-            "SPONSOR DASHBOARD",
-            class_name="text-[11px] font-semibold tracking-[0.18em] text-[#246D67]",
-        ),
-        rx.el.h1(
-            f"Welcome, {SponsorState.full_name}",
-            class_name="mt-3 break-words text-2xl font-semibold tracking-tight text-[#172B3D]",
-        ),
-        rx.el.button(
-            rx.icon("log-out", class_name="h-4 w-4"),
-            "Sign out",
-            type="button",
-            on_click=SponsorState.logout,
-            class_name="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#246D67] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#1C5752] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#246D67]",
-        ),
-        class_name="w-full rounded-2xl border border-[#E2E4DC] bg-white p-7 sm:p-9",
+
+def _page(route: str, content: rx.Component) -> rx.Component:
+    return dashboard_layout(
+        role_label="Sponsor",
+        nav=SPONSOR_NAV,
+        active=route,
+        authorized=SponsorState.authorized,
+        content=content,
     )
 
 
-def sponsor_portal() -> rx.Component:
-    return rx.el.main(
-        rx.el.div(
-            rx.el.header(
-                rx.el.p(
-                    "UniFlow",
-                    class_name="text-2xl font-semibold tracking-tight text-[#172B3D]",
-                ),
-                rx.el.p(
-                    "University identity portal",
-                    class_name="mt-1 text-sm text-[#667078]",
-                ),
-                class_name="mb-9 text-center",
-            ),
-            rx.cond(
-                SponsorState.authorized,
-                sponsor_welcome_card(),
-                rx.el.p(
-                    "Verifying access…",
-                    role="status",
-                    custom_attrs={"aria-live": "polite"},
-                    class_name="w-full rounded-2xl border border-[#E2E4DC] bg-white p-9 text-center text-sm text-[#667078]",
-                ),
-            ),
-            rx.el.footer(
-                "One university. Your connection.",
-                class_name="mt-7 text-center text-xs tracking-wide text-[#7B8385]",
-            ),
-            class_name="w-full max-w-[440px]",
-        ),
-        class_name="flex min-h-dvh w-full items-center justify-center bg-[#F7F6EF] px-5 py-12 font-['Inter',sans-serif] text-[#172B3D]",
-    )
+def sponsor_home() -> rx.Component:
+    return _page("/sponsor", home_content("Sponsor", SPONSOR_NAV, SponsorState.full_name))
+
+
+def sponsor_submit() -> rx.Component:
+    # T-4 / T-5 (Anthony): replace coming_soon with the submission form.
+    return _page("/sponsor/submit", coming_soon("Sponsor", SPONSOR_NAV[1]))
+
+
+def sponsor_projects() -> rx.Component:
+    # T-6 (Anthony): replace coming_soon with the My projects list.
+    return _page("/sponsor/projects", coming_soon("Sponsor", SPONSOR_NAV[2]))
+
+
+# (page function, route, browser tab title). UniFlow_.py registers each one
+# with SponsorState's on_load check, so every page is protected the same way.
+SPONSOR_PAGES = [
+    (sponsor_home, "/sponsor", "Sponsor Dashboard"),
+    (sponsor_submit, "/sponsor/submit", "Submit project"),
+    (sponsor_projects, "/sponsor/projects", "My projects"),
+]
