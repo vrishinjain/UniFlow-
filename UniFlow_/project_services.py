@@ -1,4 +1,3 @@
-
 import reflex as rx
 
 from sqlalchemy import text
@@ -19,27 +18,17 @@ from UniFlow_.utils.files import (
 
 
 def submit_project(
-    sponsor_id: int,
-    title: str,
-    description: str,
-    files: list[ValidatedFile],
+    sponsor_id: int, title: str, description: str, files: list[ValidatedFile]
 ) -> int:
     """Save one submission and all attachments in the existing transaction."""
-
     _validate_user_id(sponsor_id)
-
     title = _required_text(title, "Title")
     description = _required_text(description, "Description")
-
     if len(files) > MAX_FILES:
-        raise ValueError(
-            "Choose at most 3 attachments. Nothing was saved."
-        )
-
+        raise ValueError("Choose at most 3 attachments. Nothing was saved.")
     for file in files:
         filename = _safe_filename(file["filename"])
         extension = filename.rsplit(".", 1)[-1].lower()
-
         if (
             not isinstance(file["data"], bytes)
             or not 0 < len(file["data"]) <= MAX_FILE_BYTES
@@ -47,7 +36,6 @@ def submit_project(
             raise ValueError(
                 "Each attachment must be non-empty and 10 MB or smaller."
             )
-
         if (
             file["size_bytes"] != len(file["data"])
             or file["content_type"] != MIME_TYPES[f".{extension}"]
@@ -55,19 +43,14 @@ def submit_project(
             raise ValueError(
                 "An attachment has invalid metadata. Please select it again."
             )
-
         _validate_signature(file["data"], f".{extension}")
-
     with _transaction() as session:
         sponsor = session.execute(
             text(
-                "SELECT role, status, must_change_password "
-                "FROM public.users "
-                "WHERE id = :id FOR UPDATE"
+                "SELECT role, status, must_change_password FROM public.users WHERE id = :id FOR UPDATE"
             ),
             {"id": sponsor_id},
         ).first()
-
         if (
             sponsor is None
             or sponsor.role != "sponsor"
@@ -75,17 +58,12 @@ def submit_project(
             or sponsor.must_change_password
         ):
             raise PermissionError(
-                "Only active sponsors who have set their password "
-                "may submit projects."
+                "Only active sponsors who have set their password may submit projects."
             )
-
         project_id = int(
             session.execute(
                 text(
-                    "INSERT INTO public.projects "
-                    "(sponsor_id, title, description, status) "
-                    "VALUES (:sponsor_id, :title, :description, :status) "
-                    "RETURNING id"
+                    "INSERT INTO public.projects (sponsor_id, title, description, status) VALUES (:sponsor_id, :title, :description, :status) RETURNING id"
                 ),
                 {
                     "sponsor_id": sponsor_id,
@@ -95,32 +73,20 @@ def submit_project(
                 },
             ).scalar_one()
         )
-
         if files:
             session.execute(
                 text(
-                    "INSERT INTO public.project_files "
-                    "(project_id, filename, content_type, size_bytes, data) "
-                    "VALUES "
-                    "(:project_id, :filename, :content_type, "
-                    ":size_bytes, :data)"
+                    "INSERT INTO public.project_files (project_id, filename, content_type, size_bytes, data) VALUES (:project_id, :filename, :content_type, :size_bytes, :data)"
                 ),
-                [
-                    {"project_id": project_id, **file}
-                    for file in files
-                ],
+                [{"project_id": project_id, **file} for file in files],
             )
-
     return project_id
 
-
 def get_faculty_projects() -> list[dict]:
-    """Get all submitted projects with sponsor names, newest first."""
-
+    """Get submitted projects for the faculty dashboard."""
     with _transaction() as session:
         rows = session.execute(
-            text(
-                """
+            text("""
                 SELECT
                     p.id,
                     p.title,
@@ -131,21 +97,17 @@ def get_faculty_projects() -> list[dict]:
                 JOIN public.users AS u
                     ON p.sponsor_id = u.id
                 ORDER BY p.created_at DESC, p.id DESC
-                """
-            )
+            """)
         ).mappings().all()
 
-    return [
-        {
-            "id": str(row["id"]),
-            "title": str(row["title"]),
-            "sponsor_name": str(row["sponsor_name"]),
-            "created_at": (
-                str(row["created_at"])
-                if row["created_at"] is not None
-                else ""
-            ),
-            "status": str(row["status"]),
-        }
-        for row in rows
-    ]
+        return [
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "sponsor_name": row["sponsor_name"],
+                "created_at": row["created_at"].strftime("%Y-%m-%d"),
+                "status": row["status"],
+            }
+            for row in rows
+        ]
+
