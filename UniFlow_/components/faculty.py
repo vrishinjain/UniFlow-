@@ -1,211 +1,151 @@
+
 import reflex as rx
 
-from UniFlow_.components.dashboard_layout import (
-    NavItem,
-    coming_soon,
-    dashboard_layout,
-    home_content,
+from sqlalchemy import text
+
+from UniFlow_.user_services import (
+    _required_text,
+    _transaction,
+    _validate_user_id,
 )
-from UniFlow_.states.faculty_state import FacultyState
+from UniFlow_.utils.files import (
+    MAX_FILES,
+    MAX_FILE_BYTES,
+    MIME_TYPES,
+    ValidatedFile,
+    _safe_filename,
+    _validate_signature,
+)
 
 
-FACULTY_NAV = [
-    NavItem(
-        "Home",
-        "house",
-        "/faculty",
-        "Overview of your faculty workspace.",
-    ),
-    NavItem(
-        "Submitted projects",
-        "folder-open",
-        "/faculty/projects",
-        "Review projects that sponsors have submitted.",
-    ),
-    NavItem(
-        "My students",
-        "users",
-        "/faculty/students",
-        "See the students you supervise.",
-    ),
-]
+def submit_project(
+    sponsor_id: int,
+    title: str,
+    description: str,
+    files: list[ValidatedFile],
+) -> int:
+    """Save one submission and all attachments in the existing transaction."""
 
+    _validate_user_id(sponsor_id)
 
-def _page(route: str, content: rx.Component) -> rx.Component:
-    return dashboard_layout(
-        role_label="Faculty",
-        nav=FACULTY_NAV,
-        active=route,
-        authorized=FacultyState.authorized,
-        content=content,
-    )
+    title = _required_text(title, "Title")
+    description = _required_text(description, "Description")
 
+    if len(files) > MAX_FILES:
+        raise ValueError(
+            "Choose at most 3 attachments. Nothing was saved."
+        )
 
-def faculty_home() -> rx.Component:
-    return _page(
-        "/faculty",
-        home_content(
-            "Faculty",
-            FACULTY_NAV,
-            FacultyState.full_name,
-        ),
-    )
+    for file in files:
+        filename = _safe_filename(file["filename"])
+        extension = filename.rsplit(".", 1)[-1].lower()
 
-
-def _project_row(project: dict) -> rx.Component:
-    return rx.table.row(
-        rx.table.cell(
-            rx.link(
-                project["title"],
-                href="/faculty/project/" + project["id"].to(str),
-                color="blue",
-                text_decoration="underline",
+        if (
+            not isinstance(file["data"], bytes)
+            or not 0 < len(file["data"]) <= MAX_FILE_BYTES
+        ):
+            raise ValueError(
+                "Each attachment must be non-empty and 10 MB or smaller."
             )
-        ),
-        rx.table.cell(project["sponsor_name"]),
-        rx.table.cell(project["created_at"]),
-        rx.table.cell(project["status"]),
-    )
 
+        if (
+            file["size_bytes"] != len(file["data"])
+            or file["content_type"] != MIME_TYPES[f".{extension}"]
+        ):
+            raise ValueError(
+                "An attachment has invalid metadata. Please select it again."
+            )
 
-def _projects_content() -> rx.Component:
-    return rx.vstack(
-        rx.heading(
-            "Submitted Projects",
-            size="6",
-        ),
-        rx.text(
-            "Projects submitted by sponsors."
-        ),
-        rx.cond(
-            FacultyState.projects.length() > 0,
-            rx.table.root(
-                rx.table.header(
-                    rx.table.row(
-                        rx.table.column_header_cell(
-                            "Project Title"
-                        ),
-                        rx.table.column_header_cell(
-                            "Sponsor"
-                        ),
-                        rx.table.column_header_cell(
-                            "Submitted Date"
-                        ),
-                        rx.table.column_header_cell(
-                            "Status"
-                        ),
-                    )
-                ),
-                rx.table.body(
-                    rx.foreach(
-                        FacultyState.projects,
-                        _project_row,
-                    )
-                ),
-                width="100%",
+        _validate_signature(file["data"], f".{extension}")
+
+    with _transaction() as session:
+        sponsor = session.execute(
+            text(
+                "SELECT role, status, must_change_password "
+                "FROM public.users "
+                "WHERE id = :id FOR UPDATE"
             ),
-            rx.text(
-                "No submitted projects found."
-            ),
-        ),
-        spacing="4",
-        align="start",
-        width="100%",
-    )
+            {"id": sponsor_id},
+        ).first()
 
+        if (
+            sponsor is None
+            or sponsor.role != "sponsor"
+            or sponsor.status != "active"
+            or sponsor.must_change_password
+        ):
+            raise PermissionError(
+                "Only active sponsors who have set their password "
+                "may submit projects."
+            )
 
-def faculty_projects() -> rx.Component:
-    return _page(
-        "/faculty/projects",
-        _projects_content(),
-    )
-
-
-def _project_details_content() -> rx.Component:
-    return rx.vstack(
-        rx.link(
-            "← Back to Submitted Projects",
-            href="/faculty/projects",
-        ),
-        rx.heading(
-            "Project Details",
-            size="6",
-        ),
-        rx.cond(
-            FacultyState.project_error != "",
-            rx.text(
-                FacultyState.project_error,
-                color="red",
-            ),
-            rx.cond(
-                FacultyState.selected_project.contains("id"),
-                rx.vstack(
-                    rx.heading(
-                        FacultyState.selected_project["title"],
-                        size="5",
-                    ),
-                    rx.text(
-                        "Sponsor: ",
-                        FacultyState.selected_project["sponsor_name"],
-                    ),
-                    rx.text(
-                        "Submitted: ",
-                        FacultyState.selected_project["created_at"],
-                    ),
-                    rx.text(
-                        "Status: ",
-                        FacultyState.selected_project["status"],
-                    ),
-                    spacing="3",
-                    align="start",
+        project_id = int(
+            session.execute(
+                text(
+                    "INSERT INTO public.projects "
+                    "(sponsor_id, title, description, status) "
+                    "VALUES (:sponsor_id, :title, :description, :status) "
+                    "RETURNING id"
                 ),
-                rx.text(
-                    "Loading project details..."
+                {
+                    "sponsor_id": sponsor_id,
+                    "title": title,
+                    "description": description,
+                    "status": "submitted",
+                },
+            ).scalar_one()
+        )
+
+        if files:
+            session.execute(
+                text(
+                    "INSERT INTO public.project_files "
+                    "(project_id, filename, content_type, size_bytes, data) "
+                    "VALUES "
+                    "(:project_id, :filename, :content_type, "
+                    ":size_bytes, :data)"
                 ),
+                [
+                    {"project_id": project_id, **file}
+                    for file in files
+                ],
+            )
+
+    return project_id
+
+
+def get_faculty_projects() -> list[dict]:
+    """Get submitted projects with sponsor names, newest first."""
+
+    with _transaction() as session:
+        rows = session.execute(
+            text(
+                """
+                SELECT
+                    p.id,
+                    p.title,
+                    u.full_name AS sponsor_name,
+                    p.created_at,
+                    p.status
+                FROM public.projects AS p
+                JOIN public.users AS u
+                    ON p.sponsor_id = u.id
+                ORDER BY p.created_at DESC, p.id DESC
+                """
+            )
+        ).mappings().all()
+
+    return [
+        {
+            "id": str(row["id"]),
+            "title": str(row["title"]),
+            "sponsor_name": str(row["sponsor_name"]),
+            "created_at": (
+                row["created_at"].strftime("%Y-%m-%d")
+                if row["created_at"] is not None
+                else ""
             ),
-        ),
-        spacing="4",
-        align="start",
-        width="100%",
-    )
-
-
-def faculty_project_details() -> rx.Component:
-    return _page(
-        "/faculty/projects",
-        _project_details_content(),
-    )
-
-
-def faculty_students() -> rx.Component:
-    return _page(
-        "/faculty/students",
-        coming_soon(
-            "Faculty",
-            FACULTY_NAV[2],
-        ),
-    )
-
-
-FACULTY_PAGES = [
-    (
-        faculty_home,
-        "/faculty",
-        "Faculty Dashboard",
-    ),
-    (
-        faculty_projects,
-        "/faculty/projects",
-        "Submitted projects",
-    ),
-    (
-        faculty_project_details,
-        "/faculty/project/[id]",
-        "Project Details",
-    ),
-    (
-        faculty_students,
-        "/faculty/students",
-        "My students",
-    ),
-]
+            "status": str(row["status"]),
+        }
+        for row in rows
+    ]
