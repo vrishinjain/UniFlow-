@@ -116,10 +116,7 @@ def _project_details_content() -> rx.Component:
         rx.heading("Project Details", size="6"),
         rx.cond(
             FacultyState.project_error != "",
-            rx.text(
-                FacultyState.project_error,
-                color="red",
-            ),
+            rx.text(FacultyState.project_error, color="red"),
             rx.cond(
                 FacultyState.selected_project.contains("id"),
                 rx.vstack(
@@ -166,24 +163,12 @@ def faculty_students() -> rx.Component:
 
 
 FACULTY_PAGES = [
-    (
-        faculty_home,
-        "/faculty",
-        "Faculty Dashboard",
-    ),
-    (
-        faculty_projects,
-        "/faculty/projects",
-        "Submitted projects",
-    ),
+    (faculty_home, "/faculty", "Faculty Dashboard"),
+    (faculty_projects, "/faculty/projects", "Submitted projects"),
     (
         faculty_project_details,
         "/faculty/project/[id]",
         "Project Details",
     ),
-    (
-        faculty_students,
-        "/faculty/students",
-        "My students",
-    ),
+    (faculty_students, "/faculty/students", "My students"),
 ]
