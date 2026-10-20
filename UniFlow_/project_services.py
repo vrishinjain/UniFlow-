@@ -1,7 +1,30 @@
-
 import reflex as rx
 
 from sqlalchemy import text
+from typing import TypedDict
+
+
+class AttachmentMetadata(TypedDict):
+    id: str
+    filename: str
+    size_bytes: int
+
+
+class FacultyProjectDetails(TypedDict):
+    id: str
+    title: str
+    description: str
+    sponsor_name: str
+    status: str
+    created_at: str
+    files: list[AttachmentMetadata]
+
+
+class FacultyAttachment(TypedDict):
+    filename: str
+    content_type: str
+    data: bytes
+
 
 from UniFlow_.user_services import (
     _required_text,
@@ -32,9 +55,7 @@ def submit_project(
     description = _required_text(description, "Description")
 
     if len(files) > MAX_FILES:
-        raise ValueError(
-            "Choose at most 3 attachments. Nothing was saved."
-        )
+        raise ValueError("Choose at most 3 attachments. Nothing was saved.")
 
     for file in files:
         filename = _safe_filename(file["filename"])
@@ -105,22 +126,20 @@ def submit_project(
                     "(:project_id, :filename, :content_type, "
                     ":size_bytes, :data)"
                 ),
-                [
-                    {"project_id": project_id, **file}
-                    for file in files
-                ],
+                [{"project_id": project_id, **file} for file in files],
             )
 
     return project_id
 
 
-def get_faculty_projects() -> list[dict]:
-    """Get all submitted projects with sponsor names, newest first."""
+def get_faculty_projects() -> list[dict[str, str]]:
+    """Get all projects with sponsor names, newest first; no assignment filter."""
 
     with _transaction() as session:
-        rows = session.execute(
-            text(
-                """
+        rows = (
+            session.execute(
+                text(
+                    """
                 SELECT
                     p.id,
                     p.title,
@@ -132,8 +151,11 @@ def get_faculty_projects() -> list[dict]:
                     ON p.sponsor_id = u.id
                 ORDER BY p.created_at DESC, p.id DESC
                 """
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
 
     return [
         {
@@ -141,22 +163,31 @@ def get_faculty_projects() -> list[dict]:
             "title": str(row["title"]),
             "sponsor_name": str(row["sponsor_name"]),
             "created_at": (
-                str(row["created_at"])
-                if row["created_at"] is not None
-                else ""
+                str(row["created_at"]) if row["created_at"] is not None else ""
             ),
             "status": str(row["status"]),
         }
         for row in rows
     ]
-    
-def get_faculty_project_details(project_id: int) -> dict | None:
+
+
+def get_faculty_project_details(
+    project_id: int,
+) -> FacultyProjectDetails | None:
     """Get project details and attachment metadata without file contents."""
 
+    if (
+        isinstance(project_id, bool)
+        or not isinstance(project_id, int)
+        or project_id <= 0
+    ):
+        return None
+
     with _transaction() as session:
-        project = session.execute(
-            text(
-                """
+        project = (
+            session.execute(
+                text(
+                    """
                 SELECT
                     p.id,
                     p.title,
@@ -169,16 +200,20 @@ def get_faculty_project_details(project_id: int) -> dict | None:
                     ON p.sponsor_id = u.id
                 WHERE p.id = :project_id
                 """
-            ),
-            {"project_id": project_id},
-        ).mappings().first()
+                ),
+                {"project_id": project_id},
+            )
+            .mappings()
+            .first()
+        )
 
         if project is None:
             return None
 
-        files = session.execute(
-            text(
-                """
+        files = (
+            session.execute(
+                text(
+                    """
                 SELECT
                     id,
                     filename,
@@ -187,9 +222,12 @@ def get_faculty_project_details(project_id: int) -> dict | None:
                 WHERE project_id = :project_id
                 ORDER BY id
                 """
-            ),
-            {"project_id": project_id},
-        ).mappings().all()
+                ),
+                {"project_id": project_id},
+            )
+            .mappings()
+            .all()
+        )
 
     return {
         "id": str(project["id"]),
@@ -216,16 +254,24 @@ def get_faculty_project_details(project_id: int) -> dict | None:
 def get_faculty_project_file(
     file_id: int,
     project_id: int,
-) -> dict | None:
+) -> FacultyAttachment | None:
     """Retrieve an attachment belonging to the selected project."""
 
-    if file_id <= 0 or project_id <= 0:
+    if (
+        isinstance(file_id, bool)
+        or isinstance(project_id, bool)
+        or not isinstance(file_id, int)
+        or not isinstance(project_id, int)
+        or file_id <= 0
+        or project_id <= 0
+    ):
         return None
 
     with _transaction() as session:
-        file = session.execute(
-            text(
-                """
+        file = (
+            session.execute(
+                text(
+                    """
                 SELECT
                     id,
                     project_id,
@@ -236,12 +282,15 @@ def get_faculty_project_file(
                 WHERE id = :file_id
                   AND project_id = :project_id
                 """
-            ),
-            {
-                "file_id": file_id,
-                "project_id": project_id,
-            },
-        ).mappings().first()
+                ),
+                {
+                    "file_id": file_id,
+                    "project_id": project_id,
+                },
+            )
+            .mappings()
+            .first()
+        )
 
     if file is None:
         return None
@@ -251,5 +300,3 @@ def get_faculty_project_file(
         "content_type": str(file["content_type"]),
         "data": bytes(file["data"]),
     }
-
-

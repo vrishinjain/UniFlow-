@@ -1,4 +1,3 @@
-
 import reflex as rx
 
 from UniFlow_.components.dashboard_layout import (
@@ -8,6 +7,7 @@ from UniFlow_.components.dashboard_layout import (
     home_content,
 )
 from UniFlow_.states.faculty_state import FacultyState
+from UniFlow_.project_services import AttachmentMetadata
 
 
 FACULTY_NAV = [
@@ -53,12 +53,12 @@ def faculty_home() -> rx.Component:
     )
 
 
-def _project_row(project: dict) -> rx.Component:
+def _project_row(project: rx.Var[dict[str, str]]) -> rx.Component:
     return rx.table.row(
         rx.table.cell(
             rx.link(
                 project["title"],
-                href="/faculty/project/" + project["id"].to(str),
+                href=f"/faculty/project/{project['id']}",
                 color="blue",
                 text_decoration="underline",
             )
@@ -73,6 +73,14 @@ def _projects_content() -> rx.Component:
     return rx.vstack(
         rx.heading("Submitted Projects", size="6"),
         rx.text("Projects submitted by sponsors."),
+        rx.cond(
+            FacultyState.project_error != "",
+            rx.el.p(
+                FacultyState.project_error,
+                role="alert",
+                class_name="text-sm text-red-700",
+            ),
+        ),
         rx.cond(
             FacultyState.projects.length() > 0,
             rx.table.root(
@@ -92,7 +100,13 @@ def _projects_content() -> rx.Component:
                 ),
                 width="100%",
             ),
-            rx.text("No submitted projects found."),
+            rx.cond(
+                FacultyState.project_error == "",
+                rx.el.p(
+                    "No submitted projects found.",
+                    class_name="text-sm text-slate-600",
+                ),
+            ),
         ),
         spacing="4",
         align="start",
@@ -107,27 +121,21 @@ def faculty_projects() -> rx.Component:
     )
 
 
-def _file_row(file: dict) -> rx.Component:
+def _file_row(file: rx.Var[AttachmentMetadata]) -> rx.Component:
     return rx.table.row(
+        rx.table.cell(file["filename"]),
+        rx.table.cell(f"{file['size_bytes']} bytes"),
         rx.table.cell(
-            file["filename"].to(str)
-        ),
-        rx.table.cell(
-            rx.text(
-                file["size_bytes"].to(int).to(str),
-                " bytes",
-            )
-        ),
-        rx.table.cell(
-            rx.button(
+            rx.el.button(
+                rx.icon("download", class_name="h-4 w-4"),
                 "Download",
-                size="2",
-                variant="outline",
-                on_click=FacultyState.download_file(
-                    file["id"].to(str)
-                ),
+                type="button",
+                on_click=FacultyState.download_file(file["id"]),
+                aria_label=f"Download {file['filename']}",
+                class_name="flex w-fit items-center gap-2 rounded-md border border-teal-600 bg-white px-3 py-1.5 text-sm font-medium text-teal-700 hover:bg-teal-50 focus-visible:ring-2 focus-visible:ring-teal-600",
             )
         ),
+        key=file["id"],
     )
 
 
@@ -146,41 +154,29 @@ def _project_details_content() -> rx.Component:
             ),
         ),
         rx.cond(
-            FacultyState.selected_project.contains("id"),
+            FacultyState.selected_project.get("id", "") != "",
             rx.vstack(
                 rx.heading(
-                    FacultyState.selected_project[
-                        "title"
-                    ].to(str),
+                    FacultyState.selected_project["title"].to(str),
                     size="5",
                 ),
                 rx.text(
                     "Sponsor: ",
-                    FacultyState.selected_project[
-                        "sponsor_name"
-                    ].to(str),
+                    FacultyState.selected_project["sponsor_name"].to(str),
                 ),
                 rx.text(
                     "Submitted: ",
-                    FacultyState.selected_project[
-                        "created_at"
-                    ].to(str),
+                    FacultyState.selected_project["created_at"].to(str),
                 ),
                 rx.text(
                     "Status: ",
-                    FacultyState.selected_project[
-                        "status"
-                    ].to(str),
+                    FacultyState.selected_project["status"].to(str),
                 ),
                 rx.heading(
                     "Description",
                     size="4",
                 ),
-                rx.text(
-                    FacultyState.selected_project[
-                        "description"
-                    ].to(str)
-                ),
+                rx.text(FacultyState.selected_project["description"].to(str)),
                 rx.heading(
                     "Attachments",
                     size="4",
@@ -190,15 +186,9 @@ def _project_details_content() -> rx.Component:
                     rx.table.root(
                         rx.table.header(
                             rx.table.row(
-                                rx.table.column_header_cell(
-                                    "Filename"
-                                ),
-                                rx.table.column_header_cell(
-                                    "Size"
-                                ),
-                                rx.table.column_header_cell(
-                                    "Action"
-                                ),
+                                rx.table.column_header_cell("Filename"),
+                                rx.table.column_header_cell("Size"),
+                                rx.table.column_header_cell("Action"),
                             )
                         ),
                         rx.table.body(
@@ -209,15 +199,20 @@ def _project_details_content() -> rx.Component:
                         ),
                         width="100%",
                     ),
-                    rx.text(
-                        "No attachments uploaded."
-                    ),
+                    rx.text("No attachments uploaded."),
                 ),
                 spacing="3",
                 align="start",
                 width="100%",
             ),
-            rx.text("Loading project details..."),
+            rx.cond(
+                FacultyState.project_error == "",
+                rx.el.p(
+                    "Loading project details...",
+                    role="status",
+                    class_name="text-sm text-slate-600",
+                ),
+            ),
         ),
         spacing="4",
         align="start",
