@@ -4,6 +4,7 @@ import asyncio
 import logging
 from typing import Any
 
+from UniFlow_.project_services import SponsorProject, list_sponsor_projects
 from UniFlow_.project_services import submit_project as save_project
 from UniFlow_.utils.files import ValidatedFile, read_and_validate
 from UniFlow_.states.login_state import LoginState
@@ -22,6 +23,10 @@ class SponsorState(rx.State):
     loading: bool = False
     success_message: str = ""
     _pending_files: list[ValidatedFile] = []
+    projects: list[SponsorProject] = []
+    projects_loading: bool = False
+    projects_loaded: bool = False
+    projects_error: str = ""
 
     @rx.var
     def authorized(self) -> bool:
@@ -38,6 +43,55 @@ class SponsorState(rx.State):
         self.submission_error = ""
         self.success_message = ""
         self._pending_files = []
+        self.projects = []
+        self.projects_loading = False
+        self.projects_loaded = False
+        self.projects_error = ""
+
+    @rx.event
+    async def load_my_projects(self):
+        self.projects = []
+        self.projects_error = ""
+        self.projects_loaded = False
+        self.projects_loading = True
+        yield
+        try:
+            account, redirect_to = await check_dashboard_access(self, "sponsor")
+            if account is None:
+                self._clear_access()
+                yield rx.redirect(redirect_to)
+                return
+            sponsor_id = int(account.id)
+            projects: list[SponsorProject] = []
+            error = ""
+            try:
+                projects = await asyncio.to_thread(
+                    list_sponsor_projects, sponsor_id
+                )
+            except Exception as e:
+                logging.exception(f"Error: {e}")
+                error = "Your projects could not be loaded. Please try again."
+            current_account, redirect_to = await check_dashboard_access(
+                self, "sponsor"
+            )
+            login = await self.get_state(LoginState)
+            if (
+                current_account is None
+                or current_account.id != sponsor_id
+                or not login.signed_in
+                or login._session_user_id != sponsor_id
+                or login.role != "sponsor"
+                or login.must_change_password
+            ):
+                self._clear_access()
+                yield rx.redirect(redirect_to or "/")
+                return
+            self.projects_error = error
+            if not error:
+                self.projects = projects
+                self.projects_loaded = True
+        finally:
+            self.projects_loading = False
 
     @rx.event(background=True)
     async def load_sponsor(self):

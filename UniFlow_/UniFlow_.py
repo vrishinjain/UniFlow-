@@ -54,7 +54,6 @@ app.add_page(
 )
 
 
-
 # Dashboard pages. Each role's pages share that role's access check, so a user
 # can only open pages for their own role. To add a page, edit the role's
 # *_PAGES list in UniFlow_/components/<role>.py.
@@ -66,7 +65,14 @@ for pages, on_load in (
     (SPONSOR_PAGES, SponsorState.load_sponsor),
 ):
     for page, route, title in pages:
-        app.add_page(page, route=route, title=f"{title} · UniFlow", on_load=on_load)
+        page_on_load = (
+            [SponsorState.load_sponsor, SponsorState.load_my_projects]
+            if route == "/sponsor/projects"
+            else on_load
+        )
+        app.add_page(
+            page, route=route, title=f"{title} · UniFlow", on_load=page_on_load
+        )
 
 app.add_page(
     set_password_portal,
