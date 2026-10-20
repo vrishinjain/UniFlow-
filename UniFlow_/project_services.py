@@ -81,3 +81,33 @@ def submit_project(
                 [{"project_id": project_id, **file} for file in files],
             )
     return project_id
+
+def get_faculty_projects() -> list[dict]:
+    """Get submitted projects for the faculty dashboard."""
+    with _transaction() as session:
+        rows = session.execute(
+            text("""
+                SELECT
+                    p.id,
+                    p.title,
+                    u.full_name AS sponsor_name,
+                    p.created_at,
+                    p.status
+                FROM public.projects AS p
+                JOIN public.users AS u
+                    ON p.sponsor_id = u.id
+                ORDER BY p.created_at DESC, p.id DESC
+            """)
+        ).mappings().all()
+
+        return [
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "sponsor_name": row["sponsor_name"],
+                "created_at": row["created_at"].strftime("%Y-%m-%d"),
+                "status": row["status"],
+            }
+            for row in rows
+        ]
+
