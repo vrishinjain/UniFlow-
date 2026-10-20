@@ -149,3 +149,66 @@ def get_faculty_projects() -> list[dict]:
         }
         for row in rows
     ]
+    
+def get_faculty_project_details(project_id: int) -> dict | None:
+    """Get project details and attachment metadata without file contents."""
+
+    with _transaction() as session:
+        project = session.execute(
+            text(
+                """
+                SELECT
+                    p.id,
+                    p.title,
+                    p.description,
+                    p.status,
+                    p.created_at,
+                    u.full_name AS sponsor_name
+                FROM public.projects AS p
+                JOIN public.users AS u
+                    ON p.sponsor_id = u.id
+                WHERE p.id = :project_id
+                """
+            ),
+            {"project_id": project_id},
+        ).mappings().first()
+
+        if project is None:
+            return None
+
+        files = session.execute(
+            text(
+                """
+                SELECT
+                    id,
+                    filename,
+                    size_bytes
+                FROM public.project_files
+                WHERE project_id = :project_id
+                ORDER BY id
+                """
+            ),
+            {"project_id": project_id},
+        ).mappings().all()
+
+    return {
+        "id": str(project["id"]),
+        "title": str(project["title"]),
+        "description": str(project["description"]),
+        "sponsor_name": str(project["sponsor_name"]),
+        "status": str(project["status"]),
+        "created_at": (
+            project["created_at"].strftime("%Y-%m-%d")
+            if project["created_at"] is not None
+            else ""
+        ),
+        "files": [
+            {
+                "id": str(file["id"]),
+                "filename": str(file["filename"]),
+                "size_bytes": int(file["size_bytes"]),
+            }
+            for file in files
+        ],
+    }
+
