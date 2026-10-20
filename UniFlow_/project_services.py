@@ -212,3 +212,44 @@ def get_faculty_project_details(project_id: int) -> dict | None:
         ],
     }
 
+
+def get_faculty_project_file(
+    file_id: int,
+    project_id: int,
+) -> dict | None:
+    """Retrieve an attachment belonging to the selected project."""
+
+    if file_id <= 0 or project_id <= 0:
+        return None
+
+    with _transaction() as session:
+        file = session.execute(
+            text(
+                """
+                SELECT
+                    id,
+                    project_id,
+                    filename,
+                    content_type,
+                    data
+                FROM public.project_files
+                WHERE id = :file_id
+                  AND project_id = :project_id
+                """
+            ),
+            {
+                "file_id": file_id,
+                "project_id": project_id,
+            },
+        ).mappings().first()
+
+    if file is None:
+        return None
+
+    return {
+        "filename": str(file["filename"]),
+        "content_type": str(file["content_type"]),
+        "data": bytes(file["data"]),
+    }
+
+
