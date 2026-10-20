@@ -17,19 +17,44 @@ from UniFlow_.states.login_state import LoginState
 from UniFlow_.user_services import get_user_by_id
 
 
-async def check_dashboard_access(state: rx.State, role: str):
+async def check_dashboard_access(
+    state: rx.State, role: str, *, background: bool = False
+):
     """Return (account, "") if access is allowed, otherwise (None, redirect_url)."""
-    login = await state.get_state(LoginState)
-    session_id = login._session_user_id
-    if not login.signed_in or session_id <= 0 or login.role != role:
+    if background:
+        async with state:
+            login = await state.get_state(LoginState)
+            session_id = login._session_user_id
+            signed_in = login.signed_in
+            login_role = login.role
+            must_change_password = login.must_change_password
+    else:
+        login = await state.get_state(LoginState)
+        session_id = login._session_user_id
+        signed_in = login.signed_in
+        login_role = login.role
+        must_change_password = login.must_change_password
+    if not signed_in or session_id <= 0 or login_role != role:
         return None, "/"
-    if login.must_change_password:
+    if must_change_password:
         return None, "/set-password"
     try:
         account = await asyncio.to_thread(get_user_by_id, session_id)
     except Exception as e:
         logging.exception(f"Error: {e}")
         return None, "/"
+    if background:
+        async with state:
+            login = await state.get_state(LoginState)
+            still_signed_in = login.signed_in
+            current_id = login._session_user_id
+            current_role = login.role
+            current_password_change = login.must_change_password
+    else:
+        still_signed_in = login.signed_in
+        current_id = login._session_user_id
+        current_role = login.role
+        current_password_change = login.must_change_password
     # Re-check against the database: the account may have been changed or
     # deactivated since the user signed in.
     if (
@@ -37,9 +62,10 @@ async def check_dashboard_access(state: rx.State, role: str):
         or account.status != "active"
         or account.id != session_id
         or account.role != role
-        or not login.signed_in
-        or login._session_user_id != session_id
-        or login.role != role
+        or not still_signed_in
+        or current_id != session_id
+        or current_role != role
+        or current_password_change
     ):
         return None, "/"
     return account, ""
