@@ -1,15 +1,17 @@
-import reflex as rx
-
 import asyncio
 import logging
-
-from UniFlow_.project_services import SponsorProject, list_sponsor_projects
 from typing import Any
 
-from UniFlow_.project_services import submit_project as save_project
-from UniFlow_.utils.files import ValidatedFile, read_and_validate
+import reflex as rx
+
+from UniFlow_.project_services import (
+    SponsorProject,
+    list_sponsor_projects,
+    submit_project as save_project,
+)
 from UniFlow_.states.login_state import LoginState
 from UniFlow_.states.role_guard import check_dashboard_access
+from UniFlow_.utils.files import ValidatedFile, read_and_validate
 
 
 class SponsorState(rx.State):
@@ -20,6 +22,16 @@ class SponsorState(rx.State):
     projects_loaded: bool = False
     projects_error: str = ""
     _projects_revision: int = 0
+
+    title: str = ""
+    description: str = ""
+    title_error: str = ""
+    description_error: str = ""
+    upload_error: str = ""
+    submission_error: str = ""
+    loading: bool = False
+    success_message: str = ""
+    _pending_files: list[ValidatedFile] = []
 
     @rx.var
     def projects_view(self) -> str:
@@ -32,15 +44,6 @@ class SponsorState(rx.State):
         if not self.projects:
             return "empty"
         return "table"
-    title: str = ""
-    description: str = ""
-    title_error: str = ""
-    description_error: str = ""
-    upload_error: str = ""
-    submission_error: str = ""
-    loading: bool = False
-    success_message: str = ""
-    _pending_files: list[ValidatedFile] = []
 
     @rx.var
     def authorized(self) -> bool:
@@ -93,32 +96,30 @@ class SponsorState(rx.State):
             self.description_error = ""
 
     @rx.event
+    def clear_upload_error(self):
+        if not self.loading:
+            self.upload_error = ""
+
+    @rx.event
     def report_upload_rejections(self, rejections: list[dict[str, Any]]):
         if self.loading:
             return
         messages: list[str] = []
-        guidance = {
-            "file-invalid-type": "Unsupported file type. Select only PDF, DOCX, or PPTX documents.",
-            "file-too-large": "A file exceeds 10 MB. Reduce its size to 10 MB or less and select it again.",
-            "too-many-files": "Too many files. Select no more than 3 attachments at once.",
-            "file-too-small": "A file is too small. Select a non-empty document.",
+        error_messages = {
+            "file-invalid-type": "Only PDF, DOCX, or PPTX files are allowed.",
+            "file-too-large": "Each file must be 10 MB or smaller.",
+            "too-many-files": "You can attach a maximum of 3 files.",
+            "file-too-small": "Files must not be empty.",
         }
         for rejection in rejections:
             for error in rejection.get("errors", []):
-                message = guidance.get(
+                message = error_messages.get(
                     error.get("code", ""),
-                    "An attachment could not be selected. Retry with up to 3 PDF, DOCX, or PPTX documents, each 10 MB or less.",
+                    "A file could not be selected. Please select your documents again.",
                 )
                 if message not in messages:
                     messages.append(message)
-        self.upload_error = " ".join(messages) or (
-            "Attachments could not be selected. Select up to 3 PDF, DOCX, or PPTX documents, each 10 MB or less."
-        )
-
-    @rx.event
-    def clear_upload_error(self):
-        if not self.loading:
-            self.upload_error = ""
+        self.upload_error = " ".join(messages)
 
     async def _prepare_submission(self, files: list[rx.UploadFile]) -> bool:
         if self.loading:

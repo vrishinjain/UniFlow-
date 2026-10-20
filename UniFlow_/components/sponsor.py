@@ -2,7 +2,6 @@ import reflex as rx
 
 from UniFlow_.components.dashboard_layout import (
     NavItem,
-    coming_soon,
     dashboard_layout,
     home_content,
     page_header,
