@@ -2,11 +2,11 @@ import reflex as rx
 
 from UniFlow_.components.dashboard_layout import (
     NavItem,
-    coming_soon,
     dashboard_layout,
     home_content,
     page_header,
 )
+from UniFlow_.project_services import SponsorProject
 from UniFlow_.states.sponsor_state import SponsorState
 from UniFlow_.utils.files import MAX_FILE_BYTES
 
@@ -272,9 +272,163 @@ def sponsor_submit() -> rx.Component:
     )
 
 
+def _project_row(project: SponsorProject) -> rx.Component:
+    return rx.el.tr(
+        rx.el.th(
+            project["title"],
+            scope="row",
+            class_name="px-5 py-4 text-left text-sm font-medium text-[#172B3D] break-words",
+        ),
+        rx.el.td(
+            rx.el.span(
+                project["status"],
+                class_name="inline-block w-fit rounded-full bg-[#EAF3EF] px-3 py-1 text-xs font-semibold text-[#246D67]",
+            ),
+            class_name="px-5 py-4",
+        ),
+        rx.el.td(
+            rx.el.time(
+                project["submitted_date"], date_time=project["submitted_at"]
+            ),
+            class_name="whitespace-nowrap px-5 py-4 text-sm text-[#172B3D]",
+        ),
+        key=project["id"],
+        class_name="border-t border-[#E9EBE6] bg-white even:bg-[#F7F6EF]/50 hover:bg-[#F0F6F3]",
+    )
+
+
+def _projects_table() -> rx.Component:
+    return rx.el.div(
+        rx.el.table(
+            rx.el.caption(
+                "Your submitted projects, newest first", class_name="sr-only"
+            ),
+            rx.el.thead(
+                rx.el.tr(
+                    rx.el.th(
+                        rx.el.div(
+                            rx.icon(
+                                "file-text", class_name="h-4 w-4 text-[#246D67]"
+                            ),
+                            "Title",
+                            class_name="flex items-center gap-2",
+                        ),
+                        scope="col",
+                        class_name="w-1/2 px-5 py-4 text-left",
+                    ),
+                    rx.el.th(
+                        rx.el.div(
+                            rx.icon(
+                                "circle-check",
+                                class_name="h-4 w-4 text-[#246D67]",
+                            ),
+                            "Status",
+                            class_name="flex items-center gap-2",
+                        ),
+                        scope="col",
+                        class_name="px-5 py-4 text-left",
+                    ),
+                    rx.el.th(
+                        rx.el.div(
+                            rx.icon(
+                                "calendar", class_name="h-4 w-4 text-[#246D67]"
+                            ),
+                            "Submitted date",
+                            class_name="flex items-center gap-2",
+                        ),
+                        scope="col",
+                        class_name="px-5 py-4 text-left",
+                    ),
+                    class_name="bg-[#F7F6EF] text-xs font-semibold text-[#172B3D]",
+                ),
+            ),
+            rx.el.tbody(rx.foreach(SponsorState.projects, _project_row)),
+            class_name="table-auto w-full min-w-[540px]",
+        ),
+        tab_index=0,
+        role="region",
+        aria_label="Submitted projects table",
+        class_name="w-full overflow-x-auto focus-visible:outline-2 focus-visible:outline-[#246D67]",
+    )
+
+
 def sponsor_projects() -> rx.Component:
-    # T-6 (Anthony): replace coming_soon with the My projects list.
-    return _page("/sponsor/projects", coming_soon("Sponsor", SPONSOR_NAV[2]))
+    return _page(
+        "/sponsor/projects",
+        rx.el.div(
+            page_header(
+                "Sponsor",
+                "My projects",
+                "Track the projects you have submitted. Projects are listed newest first.",
+            ),
+            rx.el.section(
+                rx.cond(
+                    SponsorState.projects_loading
+                    | (
+                        ~SponsorState.projects_loaded
+                        & (SponsorState.projects_error == "")
+                    ),
+                    rx.el.div(
+                        rx.icon(
+                            "loader-circle",
+                            class_name="h-5 w-5 animate-spin text-[#246D67]",
+                        ),
+                        rx.el.p(
+                            "Loading your projects…",
+                            class_name="text-sm text-[#172B3D]",
+                        ),
+                        role="status",
+                        class_name="flex items-center justify-center gap-3 p-10",
+                    ),
+                    rx.cond(
+                        SponsorState.projects_error != "",
+                        rx.el.div(
+                            rx.icon(
+                                "circle-alert",
+                                class_name="h-6 w-6 text-red-700",
+                            ),
+                            rx.el.p(
+                                SponsorState.projects_error,
+                                role="alert",
+                                class_name="text-sm text-red-700",
+                            ),
+                            rx.el.button(
+                                "Try again",
+                                on_click=SponsorState.load_my_projects,
+                                class_name="rounded-lg bg-[#246D67] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1C5752] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#246D67]",
+                            ),
+                            class_name="flex flex-col items-center gap-4 p-10 text-center",
+                        ),
+                        rx.cond(
+                            SponsorState.projects.length() == 0,
+                            rx.el.div(
+                                rx.icon(
+                                    "folder",
+                                    class_name="h-8 w-8 text-[#246D67]",
+                                ),
+                                rx.el.h2(
+                                    "No projects yet",
+                                    class_name="text-lg font-semibold text-[#172B3D]",
+                                ),
+                                rx.el.p(
+                                    "Projects will appear here after you submit them.",
+                                    class_name="text-sm text-[#667078]",
+                                ),
+                                role="status",
+                                class_name="flex flex-col items-center gap-3 p-10 text-center",
+                            ),
+                            _projects_table(),
+                        ),
+                    ),
+                ),
+                custom_attrs={
+                    "aria-busy": SponsorState.projects_loading,
+                    "aria-live": "polite",
+                },
+                class_name="w-full overflow-hidden rounded-2xl border border-[#E2E4DC] bg-white",
+            ),
+        ),
+    )
 
 
 # (page function, route, browser tab title). UniFlow_.py registers each one

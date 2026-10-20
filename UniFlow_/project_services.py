@@ -1,8 +1,12 @@
 import reflex as rx
 
+import logging
+from typing import TypedDict
+
 from sqlalchemy import text
 
 from UniFlow_.user_services import (
+    _get_engine,
     _required_text,
     _transaction,
     _validate_user_id,
@@ -15,6 +19,47 @@ from UniFlow_.utils.files import (
     _safe_filename,
     _validate_signature,
 )
+
+
+class SponsorProject(TypedDict):
+    id: int
+    title: str
+    status: str
+    submitted_date: str
+    submitted_at: str
+
+
+def list_sponsor_projects(sponsor_id: int) -> list[SponsorProject]:
+    """Read display-ready projects belonging to the authenticated sponsor."""
+    _validate_user_id(sponsor_id)
+    try:
+        with _get_engine().connect() as connection:
+            rows = connection.execute(
+                text(
+                    "SELECT id,title,status,created_at FROM public.projects "
+                    "WHERE sponsor_id = :sponsor_id "
+                    "ORDER BY created_at DESC, id DESC"
+                ),
+                {"sponsor_id": sponsor_id},
+            ).all()
+        return [
+            SponsorProject(
+                id=int(row.id),
+                title=str(row.title),
+                status=str(row.status)
+                .replace("_", " ")
+                .replace("-", " ")
+                .strip()
+                .title()
+                or "Unknown",
+                submitted_date=row.created_at.strftime("%b %d, %Y"),
+                submitted_at=row.created_at.isoformat(),
+            )
+            for row in rows
+        ]
+    except Exception as e:
+        logging.exception(f"Error: {e}")
+        raise
 
 
 def submit_project(
