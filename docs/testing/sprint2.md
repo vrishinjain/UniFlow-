@@ -1,30 +1,30 @@
 # UniFlow – Sprint 2 Test Checklist and Test Run
 
-**Task:** T-10 (#43)
-**Sprint:** Sprint 2
-**Tester:** Keerthi
-**Status:** Not yet executed
+**Task:** T-10 (#43)  
+**Sprint:** Sprint 2  
+**Tester:** Keerthi  
+**Status:** Not yet executed  
 **Pull Request:** #49
 
 ## 1. Purpose
 
 This document contains the test cases for Sprint 2 of the UniFlow project. The tests are based on the acceptance criteria for US-1 (#29), US-2 (#30), and US-3 (#31).
 
-All tests are currently pending. Actual results will be recorded after the features are available and the tests are executed on the develop branch.
+All tests are currently pending. Actual results will be recorded after the features are available and the tests are executed on the `develop` branch.
 
 ## 2. Test Checklist
 
 | Test ID | User Story | Feature | Test Steps | Expected Result | Actual Result | Status |
 |---|---|---|---|---|---|---|
 | TC-01 | US-1 | Admin dashboard | Sign in as Admin | User is redirected to `/admin` | Not tested | Pending |
-| TC-02 | US-1 | Program Admin dashboard | Sign in as Program Admin | User is redirected to `/program-admin` | Not tested | Pending |
+| TC-02 | US-1 | Program Admin dashboard | Sign in as Program Admin | User is redirected to `/programadmin` | Not tested | Pending |
 | TC-03 | US-1 | Faculty dashboard | Sign in as Faculty | User is redirected to `/faculty` | Not tested | Pending |
 | TC-04 | US-1 | Student dashboard | Sign in as Student | User is redirected to `/student` | Not tested | Pending |
 | TC-05 | US-1 | Sponsor dashboard | Sign in as Sponsor | User is redirected to `/sponsor` | Not tested | Pending |
 | TC-06 | US-1 | Dashboard information | Open each dashboard after signing in | User name, role, and logout button are displayed | Not tested | Pending |
 | TC-07 | US-1 | Role protection | Sign in as Student and open `/faculty` | User is redirected to `/student` | Not tested | Pending |
-| TC-08 | US-1 | Logged-out protection | While logged out, open `/admin` | User is redirected to `/login` | Not tested | Pending |
-| TC-09 | US-1 | Logout | Sign in, click Logout, and try opening a protected dashboard | Session is cleared and user returns to `/login` | Not tested | Pending |
+| TC-08 | US-1 | Logged-out protection | While logged out, open `/admin` | User is redirected to `/` | Not tested | Pending |
+| TC-09 | US-1 | Logout | Sign in, click Logout, and try opening a protected dashboard | Session is cleared and user returns to `/` | Not tested | Pending |
 | TC-10 | US-2 | Submit project button | Sign in as Sponsor and click Submit new project | Project submission form opens | Not tested | Pending |
 | TC-11 | US-2 | Required fields | Submit the project form with an empty title or description | Validation error appears and submission is blocked | Not tested | Pending |
 | TC-12 | US-2 | File upload limit | Attach up to three valid files to a project | Up to three files are accepted | Not tested | Pending |
@@ -41,9 +41,9 @@ All tests are currently pending. Actual results will be recorded after the featu
 
 ## 3. Test Execution
 
-**Environment:** UniFlow application on the `develop` branch
-**Execution date:** Not yet scheduled
-**Tester:** Keerthi
+**Environment:** UniFlow application on the `develop` branch  
+**Execution date:** Not yet scheduled  
+**Tester:** Keerthi  
 **Overall result:** Pending
 
 | Result | Count |
@@ -77,10 +77,10 @@ Link the bug issue to T-10 (#43) and update the corresponding test result.
 
 ## 6. Sprint 2 Test Run Summary
 
-**Test checklist:** Prepared
-**Test execution:** Pending
-**Automated unit tests:** Pending
-**Bug reports:** To be created if failures occur
+**Test checklist:** Prepared  
+**Test execution:** Pending  
+**Automated unit tests:** Pending  
+**Bug reports:** To be created if failures occur  
 **Final approval:** Pending
 
 The T-10 task will be considered complete after the required tests are run on `develop`, actual results are recorded, and all must-have tests pass.
