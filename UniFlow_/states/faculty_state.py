@@ -1,3 +1,4 @@
+
 import reflex as rx
 
 from UniFlow_.states.login_state import LoginState
@@ -8,7 +9,10 @@ from UniFlow_.project_services import get_faculty_projects
 class FacultyState(rx.State):
     full_name: str = ""
     _authorized: bool = False
+
     projects: list[dict] = []
+    selected_project: dict = {}
+    project_error: str = ""
 
     @rx.var
     def authorized(self) -> bool:
@@ -18,6 +22,8 @@ class FacultyState(rx.State):
         self._authorized = False
         self.full_name = ""
         self.projects = []
+        self.selected_project = {}
+        self.project_error = ""
 
     @rx.event
     async def load_faculty(self):
@@ -34,7 +40,23 @@ class FacultyState(rx.State):
 
         self.full_name = str(account.full_name).strip()
         self._authorized = True
+
         self.projects = get_faculty_projects()
+
+        project_id = self.router.page.params.get("id")
+
+        if project_id is not None:
+            self.selected_project = next(
+                (
+                    project
+                    for project in self.projects
+                    if str(project.get("id")) == str(project_id)
+                ),
+                {},
+            )
+
+            if not self.selected_project:
+                self.project_error = "Project not found."
 
     @rx.event
     async def logout(self):
