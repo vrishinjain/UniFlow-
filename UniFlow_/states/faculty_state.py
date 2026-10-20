@@ -18,6 +18,7 @@ class FacultyState(rx.State):
 
     projects: list[dict] = []
     selected_project: dict = {}
+    files: list[dict] = []
     project_error: str = ""
 
     @rx.var
@@ -29,6 +30,7 @@ class FacultyState(rx.State):
         self.full_name = ""
         self.projects = []
         self.selected_project = {}
+        self.files = []
         self.project_error = ""
 
     @rx.event
@@ -46,7 +48,6 @@ class FacultyState(rx.State):
 
         self.full_name = str(account.full_name).strip()
         self._authorized = True
-
         self.projects = get_faculty_projects()
 
         project_id = self.router.page.params.get("id")
@@ -63,6 +64,7 @@ class FacultyState(rx.State):
                 self.project_error = "Project not found."
             else:
                 self.selected_project = details
+                self.files = details.get("files", [])
 
     @rx.event
     async def download_file(self, file_id: str):
@@ -73,27 +75,29 @@ class FacultyState(rx.State):
         if account is None:
             return rx.redirect(redirect_to)
 
+        self.project_error = ""
+
         try:
             attachment_id = int(file_id)
-            if attachment_id <= 0:
-                raise ValueError
-        except (TypeError, ValueError):
-            self.project_error = "Invalid attachment."
-            return
-
-        project_id = self.selected_project.get("id")
-
-        if not project_id:
-            self.project_error = "Project not found."
-            return
-
-        try:
-            attachment = get_faculty_project_file(
-                attachment_id,
-                int(project_id),
+            project_id = int(
+                self.router.page.params.get("id", "")
             )
+
+            if attachment_id <= 0 or project_id <= 0:
+                raise ValueError
+
         except (TypeError, ValueError):
-            attachment = None
+            self.project_error = "Invalid project or attachment."
+            return
+
+        if str(project_id) != self.selected_project.get("id"):
+            self.project_error = "Project details do not match."
+            return
+
+        attachment = get_faculty_project_file(
+            attachment_id,
+            project_id,
+        )
 
         if attachment is None:
             self.project_error = "Attachment not found."
@@ -111,7 +115,7 @@ class FacultyState(rx.State):
         )
 
         return rx.download(
-            url=data_url,
+            data=data_url,
             filename=attachment["filename"],
         )
 
