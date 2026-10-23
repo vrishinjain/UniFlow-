@@ -56,12 +56,19 @@ The checklist will be executed when the required Sprint 2 features are available
 
 ## 4. Automated Unit Tests
 
-Automated tests are planned for:
+**Execution date:** October 22, 2026  
+**Command:** `python -m unittest scripts.test_project_submission -v`
 
-- `read_and_validate`
-- `parse_roster`, if T-11 is ready
+The test suite covers file validation, project submission, authorization, rollback, and retry behavior.
 
-**Status:** Pending implementation and execution.
+| Result | Count |
+|---|---:|
+| Total | 8 |
+| Passed | 8 |
+| Failed | 0 |
+| Errors | 0 |
+
+**Result:** PASS
 
 ## 5. Bug Reporting
 
