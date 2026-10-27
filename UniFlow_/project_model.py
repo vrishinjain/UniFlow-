@@ -17,7 +17,7 @@ class Project(Base):
     __tablename__ = "projects"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('submitted', 'under_review', 'approved', 'rejected')",
+            "status IN ('pending', 'pending', 'accepted', 'rejected')",
             name="projects_status_check",
         ),
         {"schema": "public"},
@@ -31,7 +31,7 @@ class Project(Base):
     title: Mapped[str] = mapped_column(Text, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(
-        Text, nullable=False, server_default=text("'submitted'")
+        Text, nullable=False, server_default=text("'pending'")
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("now()")
