@@ -314,6 +314,92 @@ class BulkEmailResult(TypedDict):
     outcome: str
 
 
+def _is_valid_email(address: str) -> bool:
+    local, separator, domain = address.partition("@")
+    labels = domain.split(".")
+    return bool(
+        len(address) <= 254
+        and 0 < len(local) <= 64
+        and separator == "@"
+        and re.fullmatch(r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+", local)
+        and not local.startswith(".")
+        and not local.endswith(".")
+        and ".." not in local
+        and len(labels) >= 2
+        and all(
+            re.fullmatch(
+                r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label
+            )
+            for label in labels
+        )
+        and re.fullmatch(r"[A-Za-z]{2,63}|xn--[A-Za-z0-9-]{2,59}", labels[-1])
+    )
+
+
+class CourseEmailEntry(TypedDict):
+    email: str
+    line: int
+    reason: str
+
+
+class CourseEmailParse(TypedDict):
+    addresses: list[CourseEmailEntry]
+    invalid_lines: list[CourseEmailEntry]
+
+
+def normalize_course_email(value: str) -> str:
+    address = _required_text(value, "Email").lower()
+    if not _is_valid_email(address):
+        raise ValueError("Enter a valid email address.")
+    return address
+
+
+def parse_course_email_file(filename: str, data: bytes) -> CourseEmailParse:
+    if not isinstance(filename, str) or Path(filename).suffix.lower() != ".txt":
+        raise ValueError("Choose one UTF-8 .txt file.")
+    if not isinstance(data, bytes) or len(data) > BULK_EMAIL_MAX_BYTES:
+        raise ValueError("The file exceeds 1 MB. Nothing was changed.")
+    try:
+        content = data.decode("utf-8-sig")
+    except UnicodeError as e:
+        logging.exception(f"Error: {e}")
+        raise ValueError(
+            "The file must use UTF-8 encoding. Nothing was changed."
+        ) from e
+    addresses: list[CourseEmailEntry] = []
+    invalid: list[CourseEmailEntry] = []
+    seen: set[str] = set()
+    count = 0
+    first = True
+    for line, value in enumerate(content.splitlines(), start=1):
+        address = value.strip().lower()
+        if not address:
+            continue
+        if first and address == "email":
+            first = False
+            continue
+        first = False
+        count += 1
+        if count > BULK_EMAIL_MAX_ADDRESSES:
+            raise ValueError(
+                "A file may contain at most 500 nonblank address lines. Nothing was changed."
+            )
+        if not _is_valid_email(address):
+            invalid.append(
+                CourseEmailEntry(
+                    email=address, line=line, reason="Invalid email syntax"
+                )
+            )
+        elif address not in seen:
+            seen.add(address)
+            addresses.append(
+                CourseEmailEntry(email=address, line=line, reason="")
+            )
+    if not count:
+        raise ValueError("The file contains no email addresses.")
+    return CourseEmailParse(addresses=addresses, invalid_lines=invalid)
+
+
 def _validate_bulk_addresses(addresses: list[str]) -> list[str]:
     if not addresses:
         raise ValueError("The file contains no email addresses.")
@@ -325,31 +411,7 @@ def _validate_bulk_addresses(addresses: list[str]) -> list[str]:
     seen: set[str] = set()
     for index, value in enumerate(addresses, start=1):
         address = _required_text(value, f"Email at entry {index}")
-        local, separator, domain = address.partition("@")
-        labels = domain.split(".")
-        valid = (
-            len(address) <= 254
-            and 0 < len(local) <= 64
-            and separator == "@"
-            and re.fullmatch(r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~.-]+", local)
-            is not None
-            and not local.startswith(".")
-            and not local.endswith(".")
-            and ".." not in local
-            and len(labels) >= 2
-            and all(
-                re.fullmatch(
-                    r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label
-                )
-                is not None
-                for label in labels
-            )
-            and re.fullmatch(
-                r"[A-Za-z]{2,63}|xn--[A-Za-z0-9-]{2,59}", labels[-1]
-            )
-            is not None
-        )
-        if not valid:
+        if not _is_valid_email(address):
             raise ValueError(
                 f"Invalid email at entry {index}: {address}. Nothing was changed."
             )
