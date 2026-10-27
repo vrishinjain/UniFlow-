@@ -1,0 +1,13 @@
+Project status audit
+
+Old project status values are still used in the code:
+
+- UniFlow_/project_services.py:141 submits new projects with status "submitted". This will fail if the database now allows only pending, revision_requested, accepted, and rejected.
+- UniFlow_/project_model.py:20,34 still defines the old status constraint and a default of "submitted".
+- scripts/seed_sprint2.py:24-25 seeds projects with status "submitted".
+- scripts/test_project_submission.py:203 expects "submitted".
+- scripts/test_sponsor_projects.py:19 uses "under_review" as a display test value.
+
+No project-status logic specifically checks for "approved". The sponsor and faculty lists display statuses returned by the database, so they should display the new values. References to approved users concern account status, not project status.
+
+No code was changed as part of the audit.
