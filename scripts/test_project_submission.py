@@ -200,7 +200,7 @@ class ProjectServiceTests(unittest.TestCase):
         )
         self.assertEqual(self.session.rows[0]["title"], title.strip())
         self.assertEqual(self.session.rows[0]["description"], "Description")
-        self.assertEqual(self.session.rows[0]["status"], "submitted")
+        self.assertEqual(self.session.rows[0]["status"], "pending")
         self.assertEqual(self.session.rows[1]["project_id"], 42)
         self.assertIn("FOR UPDATE", self.session.statements[0])
         self.assertNotIn(title.strip(), self.session.statements[1])
