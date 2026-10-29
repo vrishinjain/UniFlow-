@@ -99,7 +99,7 @@ def _single_enrollment() -> rx.Component:
             class_name="text-xl font-semibold text-[#172B3D]",
         ),
         rx.el.p(
-            "Only existing student accounts can be enrolled. Account roles and status stay unchanged.",
+            "Only approved (active) student accounts can be enrolled. Account roles and status stay unchanged.",
             class_name="mt-2 text-sm leading-6 text-[#667078]",
         ),
         rx.el.form(
@@ -283,6 +283,10 @@ def _enrollment_feedback() -> rx.Component:
                     _summary_group(
                         "Not a student / ambiguous account",
                         FacultyState.enrollment_summary["not_student"],
+                    ),
+                    _summary_group(
+                        "Not approved",
+                        FacultyState.enrollment_summary["not_approved"],
                     ),
                     _summary_group(
                         "Invalid lines",

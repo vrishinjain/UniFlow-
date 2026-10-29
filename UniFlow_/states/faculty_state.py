@@ -63,6 +63,7 @@ class FacultyState(rx.State):
         "already_enrolled": [],
         "no_account": [],
         "not_student": [],
+        "not_approved": [],
         "invalid_lines": [],
     }
     enrollment_has_summary: bool = False
@@ -112,6 +113,7 @@ class FacultyState(rx.State):
             "already_enrolled": [],
             "no_account": [],
             "not_student": [],
+            "not_approved": [],
             "invalid_lines": [],
         }
         self.enrollment_has_summary = False
@@ -418,6 +420,7 @@ class FacultyState(rx.State):
                     "already_enrolled": [],
                     "no_account": [],
                     "not_student": [],
+                    "not_approved": [],
                     "invalid_lines": [],
                 }
                 if action == "add":

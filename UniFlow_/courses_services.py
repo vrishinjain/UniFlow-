@@ -135,6 +135,7 @@ class EnrollmentSummary(TypedDict):
     already_enrolled: list[CourseEmailEntry]
     no_account: list[CourseEmailEntry]
     not_student: list[CourseEmailEntry]
+    not_approved: list[CourseEmailEntry]
     invalid_lines: list[CourseEmailEntry]
 
 
@@ -230,6 +231,7 @@ def _enroll_course_addresses(
         already_enrolled=[],
         no_account=[],
         not_student=[],
+        not_approved=[],
         invalid_lines=parsed["invalid_lines"],
     )
     entries = parsed["addresses"]
@@ -242,17 +244,17 @@ def _enroll_course_addresses(
         _owned_course(session, faculty_id, course_id)
         rows = session.execute(
             text(
-                "SELECT u.id, lower(btrim(u.email)) AS email, u.role FROM public.users u "
+                "SELECT u.id, lower(btrim(u.email)) AS email, u.role, u.status FROM public.users u "
                 "WHERE lower(btrim(u.email)) = ANY(:emails) "
                 f"AND EXISTS (SELECT 1 FROM public.courses c WHERE {_COURSE_SCOPE}) "
                 "FOR SHARE OF u"
             ),
             parameters,
         ).all()
-        accounts: dict[str, list[tuple[int, str]]] = {}
+        accounts: dict[str, list[tuple[int, str, str]]] = {}
         for row in rows:
             accounts.setdefault(str(row.email), []).append(
-                (int(row.id), str(row.role))
+                (int(row.id), str(row.role), str(row.status))
             )
         eligible: dict[int, CourseEmailEntry] = {}
         for entry in entries:
@@ -270,6 +272,8 @@ def _enroll_course_addresses(
                 )
             elif matches[0][1] != "student":
                 summary["not_student"].append(entry)
+            elif matches[0][2] != "active":
+                summary["not_approved"].append(entry)
             else:
                 eligible[matches[0][0]] = entry
         if eligible:
@@ -277,7 +281,8 @@ def _enroll_course_addresses(
                 text(
                     "INSERT INTO public.course_enrollments (course_id, student_id) "
                     "SELECT c.id, u.id FROM public.courses c "
-                    "JOIN public.users u ON u.id = ANY(:student_ids) AND u.role = 'student' "
+                    "JOIN public.users u ON u.id = ANY(:student_ids) "
+                    "AND u.role = 'student' AND u.status = 'active' "
                     f"WHERE {_COURSE_SCOPE} "
                     "ON CONFLICT (course_id, student_id) DO NOTHING RETURNING student_id"
                 ),

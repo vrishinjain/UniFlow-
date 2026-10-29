@@ -232,6 +232,8 @@ class CourseAuthorizationTests(unittest.TestCase):
         source = inspect.getsource(courses._enroll_course_addresses)
         self.assertIn("lower(btrim(u.email)) = ANY(:emails)", source)
         self.assertIn("u.role = 'student'", source)
+        self.assertIn("u.status = 'active'", source)
+        self.assertIn("u.role, u.status", source)
         self.assertIn(
             "ON CONFLICT (course_id, student_id) DO NOTHING RETURNING student_id",
             source,
@@ -244,6 +246,118 @@ class CourseAuthorizationTests(unittest.TestCase):
             "_owned_course(session",
             inspect.getsource(courses.remove_course_student),
         )
+
+    def test_single_and_bulk_enrollment_require_approved_active_students(self):
+        account_rows = [
+            SimpleNamespace(
+                id=21,
+                email="active@example.edu",
+                role="student",
+                status="active",
+            ),
+            SimpleNamespace(
+                id=22,
+                email="pending@example.edu",
+                role="student",
+                status="pending",
+            ),
+            SimpleNamespace(
+                id=23,
+                email="rejected@example.edu",
+                role="student",
+                status="rejected",
+            ),
+            SimpleNamespace(
+                id=24,
+                email="faculty@example.edu",
+                role="faculty",
+                status="active",
+            ),
+        ]
+        expected_groups = {
+            "active@example.edu": "added",
+            "pending@example.edu": "not_approved",
+            "rejected@example.edu": "not_approved",
+            "faculty@example.edu": "not_student",
+            "missing@example.edu": "no_account",
+        }
+
+        def make_session():
+            session = MagicMock()
+            session.execute.side_effect = [
+                MagicMock(
+                    first=lambda: SimpleNamespace(
+                        role="faculty", status="active"
+                    )
+                ),
+                MagicMock(
+                    first=lambda: SimpleNamespace(
+                        name="Course", code="CS", term="Fall"
+                    )
+                ),
+                MagicMock(all=lambda: account_rows),
+                MagicMock(all=lambda: [SimpleNamespace(student_id=21)]),
+            ]
+            return session
+
+        for email, expected_group in expected_groups.items():
+            session = make_session()
+            with (
+                self.subTest(single_email=email),
+                patch.object(courses, "_transaction") as transaction,
+            ):
+                transaction.return_value.__enter__.return_value = session
+                summary = courses.enroll_course_student(12, "7", email)
+            self.assertEqual(
+                [item["email"] for item in summary[expected_group]], [email]
+            )
+            for group in expected_groups.values():
+                if group != expected_group:
+                    self.assertEqual(
+                        [item["email"] for item in summary[group]], []
+                    )
+            if expected_group == "added":
+                insert_sql, insert_params = session.execute.call_args.args
+                self.assertIn("u.status = 'active'", str(insert_sql))
+                self.assertEqual(insert_params["student_ids"], [21])
+            else:
+                self.assertEqual(session.execute.call_count, 3)
+
+        session = make_session()
+        mixed_addresses = (
+            b"active@example.edu\n"
+            b"pending@example.edu\n"
+            b"rejected@example.edu\n"
+            b"faculty@example.edu\n"
+            b"missing@example.edu\n"
+        )
+        with patch.object(courses, "_transaction") as transaction:
+            transaction.return_value.__enter__.return_value = session
+            summary = courses.bulk_enroll_course_students(
+                12, "7", "students.txt", mixed_addresses
+            )
+        self.assertEqual(
+            [item["email"] for item in summary["added"]],
+            ["active@example.edu"],
+        )
+        self.assertEqual(
+            [item["email"] for item in summary["not_approved"]],
+            ["pending@example.edu", "rejected@example.edu"],
+        )
+        self.assertEqual(
+            [item["email"] for item in summary["not_student"]],
+            ["faculty@example.edu"],
+        )
+        self.assertEqual(
+            [item["email"] for item in summary["no_account"]],
+            ["missing@example.edu"],
+        )
+        self.assertEqual(summary["already_enrolled"], [])
+        insert_sql, insert_params = session.execute.call_args.args
+        self.assertIn("u.status = 'active'", str(insert_sql))
+        self.assertEqual(insert_params["student_ids"], [21])
+        self.assertNotIn(22, insert_params["student_ids"])
+        self.assertNotIn(23, insert_params["student_ids"])
 
 
 class CourseDetailAccessTests(unittest.IsolatedAsyncioTestCase):
