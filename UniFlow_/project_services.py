@@ -1,4 +1,3 @@
-
 import reflex as rx
 
 import logging
@@ -79,9 +78,7 @@ def submit_project(
     description = _required_text(description, "Description")
 
     if len(files) > MAX_FILES:
-        raise ValueError(
-            "Choose at most 3 attachments. Nothing was saved."
-        )
+        raise ValueError("Choose at most 3 attachments. Nothing was saved.")
 
     for file in files:
         filename = _safe_filename(file["filename"])
@@ -151,10 +148,7 @@ def submit_project(
                     "VALUES (:project_id, :filename, :content_type, "
                     ":size_bytes, :data)"
                 ),
-                [
-                    {"project_id": project_id, **file}
-                    for file in files
-                ],
+                [{"project_id": project_id, **file} for file in files],
             )
 
     return project_id
@@ -164,8 +158,9 @@ def get_faculty_projects() -> list[dict]:
     """Get projects for the faculty dashboard."""
 
     with _transaction() as session:
-        rows = session.execute(
-            text("""
+        rows = (
+            session.execute(
+                text("""
                 SELECT
                     p.id,
                     p.title,
@@ -177,7 +172,10 @@ def get_faculty_projects() -> list[dict]:
                     ON p.sponsor_id = u.id
                 ORDER BY p.created_at DESC, p.id DESC
             """)
-        ).mappings().all()
+            )
+            .mappings()
+            .all()
+        )
 
         return [
             {
@@ -195,6 +193,7 @@ def get_faculty_projects() -> list[dict]:
 # T-8: Faculty Project Details and Attachment List
 # --------------------------------------------------
 
+
 def get_faculty_project_details(project_id: int) -> dict | None:
     """Get project information and attachment metadata.
 
@@ -206,8 +205,9 @@ def get_faculty_project_details(project_id: int) -> dict | None:
         return None
 
     with _transaction() as session:
-        project = session.execute(
-            text("""
+        project = (
+            session.execute(
+                text("""
                 SELECT
                     p.id,
                     p.title,
@@ -220,14 +220,18 @@ def get_faculty_project_details(project_id: int) -> dict | None:
                     ON p.sponsor_id = u.id
                 WHERE p.id = :project_id
             """),
-            {"project_id": project_id},
-        ).mappings().first()
+                {"project_id": project_id},
+            )
+            .mappings()
+            .first()
+        )
 
         if project is None:
             return None
 
-        attachments = session.execute(
-            text("""
+        attachments = (
+            session.execute(
+                text("""
                 SELECT
                     id,
                     filename,
@@ -236,8 +240,11 @@ def get_faculty_project_details(project_id: int) -> dict | None:
                 WHERE project_id = :project_id
                 ORDER BY id
             """),
-            {"project_id": project_id},
-        ).mappings().all()
+                {"project_id": project_id},
+            )
+            .mappings()
+            .all()
+        )
 
         return {
             "id": str(project["id"]),
@@ -261,6 +268,7 @@ def get_faculty_project_details(project_id: int) -> dict | None:
 # T-8: Faculty Attachment Download
 # --------------------------------------------------
 
+
 def get_faculty_project_file(
     file_id: int,
     project_id: int,
@@ -274,8 +282,9 @@ def get_faculty_project_file(
         return None
 
     with _transaction() as session:
-        attachment = session.execute(
-            text("""
+        attachment = (
+            session.execute(
+                text("""
                 SELECT
                     filename,
                     content_type,
@@ -284,11 +293,14 @@ def get_faculty_project_file(
                 WHERE id = :file_id
                   AND project_id = :project_id
             """),
-            {
-                "file_id": file_id,
-                "project_id": project_id,
-            },
-        ).mappings().first()
+                {
+                    "file_id": file_id,
+                    "project_id": project_id,
+                },
+            )
+            .mappings()
+            .first()
+        )
 
         if attachment is None:
             return None
@@ -298,3 +310,103 @@ def get_faculty_project_file(
             "content_type": str(attachment["content_type"]),
             "data": bytes(attachment["data"]),
         }
+
+
+def list_shared_projects_for_student(student_id: int) -> list[dict]:
+    """Read accepted projects shared with at least one enrolled course."""
+    _validate_user_id(student_id)
+
+    with _transaction() as session:
+        rows = (
+            session.execute(
+                text("""
+                SELECT p.id, p.title, p.description
+                FROM public.projects AS p
+                WHERE p.status = 'accepted'
+                  AND EXISTS (
+                      SELECT 1
+                      FROM public.project_course_visibility AS visibility
+                      JOIN public.course_enrollments AS enrollment
+                        ON enrollment.course_id = visibility.course_id
+                      WHERE visibility.project_id = p.id
+                        AND enrollment.student_id = :student_id
+                  )
+                ORDER BY p.id DESC
+            """),
+                {"student_id": student_id},
+            )
+            .mappings()
+            .all()
+        )
+
+        return [
+            {
+                "id": int(row["id"]),
+                "title": str(row["title"] or ""),
+                "description": str(row["description"] or ""),
+            }
+            for row in rows
+        ]
+
+
+def get_shared_project_for_student(
+    student_id: int, project_id: int
+) -> dict | None:
+    """Read one accessible accepted project and attachment metadata only."""
+    _validate_user_id(student_id)
+    if (
+        isinstance(project_id, bool)
+        or not isinstance(project_id, int)
+        or not 0 < project_id <= 9223372036854775807
+    ):
+        return None
+
+    with _transaction() as session:
+        rows = (
+            session.execute(
+                text("""
+                SELECT p.id, p.title, p.description,
+                       attachment.id AS file_id,
+                       attachment.filename, attachment.uploaded_at
+                FROM public.projects AS p
+                LEFT JOIN public.project_files AS attachment
+                  ON attachment.project_id = p.id
+                WHERE p.id = :project_id
+                  AND p.status = 'accepted'
+                  AND EXISTS (
+                      SELECT 1
+                      FROM public.project_course_visibility AS visibility
+                      JOIN public.course_enrollments AS enrollment
+                        ON enrollment.course_id = visibility.course_id
+                      WHERE visibility.project_id = p.id
+                        AND enrollment.student_id = :student_id
+                  )
+                ORDER BY attachment.uploaded_at ASC, attachment.id ASC
+                """),
+                {"student_id": student_id, "project_id": project_id},
+            )
+            .mappings()
+            .all()
+        )
+
+    if not rows:
+        return None
+
+    project = rows[0]
+    return {
+        "id": int(project["id"]),
+        "title": str(project["title"] or ""),
+        "description": str(project["description"] or ""),
+        "files": [
+            {
+                "filename": str(row["filename"] or ""),
+                "uploaded_at": (
+                    row["uploaded_at"].strftime("%b %d, %Y")
+                    if row["uploaded_at"] is not None
+                    else "Date unavailable"
+                ),
+            }
+            for row in rows
+            if row["file_id"] is not None
+        ],
+    }

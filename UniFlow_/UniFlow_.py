@@ -6,10 +6,18 @@ from UniFlow_.states.login_state import LoginState
 from UniFlow_.states.admin_state import AdminState
 from UniFlow_.components.admin import ADMIN_PAGES
 from UniFlow_.components.student import STUDENT_PAGES
+from UniFlow_.components.student_projects import student_projects_portal
+from UniFlow_.components.student_project_detail import (
+    student_project_detail_portal,
+)
 from UniFlow_.components.faculty import FACULTY_PAGES
 from UniFlow_.components.program_admin import PROGRAM_ADMIN_PAGES
 from UniFlow_.components.sponsor import SPONSOR_PAGES
 from UniFlow_.states.student_state import StudentState
+from UniFlow_.states.student_projects_state import StudentProjectsState
+from UniFlow_.states.student_project_detail_state import (
+    StudentProjectDetailState,
+)
 from UniFlow_.states.faculty_state import FacultyState
 from UniFlow_.states.program_admin_state import ProgramAdminState
 from UniFlow_.states.sponsor_state import SponsorState
@@ -22,7 +30,6 @@ def index() -> rx.Component:
 
 
 app = rx.App(
-    theme=rx.theme(appearance="light"),
     head_components=[
         rx.el.link(rel="preconnect", href="https://fonts.googleapis.com"),
         rx.el.link(
@@ -73,6 +80,20 @@ for pages, on_load in (
         app.add_page(
             page, route=route, title=f"{title} · UniFlow", on_load=page_on_load
         )
+
+app.add_page(
+    student_projects_portal,
+    route="/student/projects",
+    title="My Projects · UniFlow",
+    on_load=StudentProjectsState.load_student_projects,
+)
+
+app.add_page(
+    student_project_detail_portal,
+    route="/student/projects/[project_id]",
+    title="Project · UniFlow",
+    on_load=StudentProjectDetailState.load_student_project_detail,
+)
 
 app.add_page(
     set_password_portal,
