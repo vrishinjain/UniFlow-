@@ -41,6 +41,7 @@ app = rx.App(
         ),
     ],
 )
+app.app_wraps[(5, "Overlay")] = lambda stateful: None
 app.add_page(
     index,
     route="/",
