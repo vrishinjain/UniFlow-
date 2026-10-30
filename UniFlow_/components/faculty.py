@@ -8,6 +8,7 @@ from UniFlow_.components.dashboard_layout import (
     home_content,
 )
 from UniFlow_.states.faculty_state import FacultyState
+from UniFlow_.components.review_panel import review_panel
 
 
 FACULTY_NAV = [
@@ -231,6 +232,8 @@ def _project_details_content() -> rx.Component:
                     ),
                     rx.divider(),
                     _attachments_content(),
+                    rx.divider(),
+                    review_panel(),
                     spacing="4",
                     align="start",
                     width="100%",
