@@ -16,7 +16,7 @@ class SponsorProjectsTests(unittest.TestCase):
             SimpleNamespace(
                 id=5,
                 title="Project",
-                status="under_review",
+                status="pending",
                 created_at=created_at,
             )
         ]
@@ -37,7 +37,7 @@ class SponsorProjectsTests(unittest.TestCase):
                 {
                     "id": 5,
                     "title": "Project",
-                    "status": "Under Review",
+                    "status": "Pending",
                     "submitted_date": "Oct 20, 2026",
                     "submitted_at": created_at.isoformat(),
                 }
