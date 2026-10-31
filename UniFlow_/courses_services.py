@@ -1,6 +1,7 @@
 import reflex as rx
 
 import logging
+from pathlib import Path
 from typing import TypedDict
 
 from sqlalchemy import text
@@ -10,9 +11,9 @@ from UniFlow_.user_services import (
     _transaction,
     _validate_user_id,
     CourseEmailEntry,
-    CourseEmailParse,
-    normalize_course_email,
-    parse_course_email_file,
+    BulkEmailParse,
+    _validate_bulk_addresses,
+    parse_bulk_email_file,
 )
 from sqlalchemy.orm import Session
 import re
@@ -222,7 +223,7 @@ def get_faculty_course_detail(
 
 
 def _enroll_course_addresses(
-    faculty_id: int, course_id: str | int, parsed: CourseEmailParse
+    faculty_id: int, course_id: str | int, parsed: BulkEmailParse
 ) -> EnrollmentSummary:
     _validate_user_id(faculty_id)
     course_id = parse_course_id(course_id)
@@ -235,13 +236,31 @@ def _enroll_course_addresses(
         invalid_lines=parsed["invalid_lines"],
     )
     entries = parsed["addresses"]
+    raw_addresses = [entry["email"] for entry in entries]
+    emails = (
+        _validate_bulk_addresses(raw_addresses)
+        if entries or not parsed["invalid_lines"]
+        else []
+    )
+    first_entries: dict[str, CourseEmailEntry] = {}
+    for entry in entries:
+        address = entry["email"].strip().lower()
+        first_entries.setdefault(
+            address,
+            CourseEmailEntry(
+                email=address, line=entry["line"], reason=entry["reason"]
+            ),
+        )
+    entries = [first_entries[email] for email in emails]
     parameters = {
         "authenticated_faculty_id": faculty_id,
         "course_id": course_id,
-        "emails": [entry["email"] for entry in entries],
+        "emails": emails,
     }
     with _transaction() as session:
         _owned_course(session, faculty_id, course_id)
+        if not entries:
+            return summary
         rows = session.execute(
             text(
                 "SELECT u.id, lower(btrim(u.email)) AS email, u.role, u.status FROM public.users u "
@@ -253,7 +272,7 @@ def _enroll_course_addresses(
         ).all()
         accounts: dict[str, list[tuple[int, str, str]]] = {}
         for row in rows:
-            accounts.setdefault(str(row.email), []).append(
+            accounts.setdefault(str(row.email).strip().lower(), []).append(
                 (int(row.id), str(row.role), str(row.status))
             )
         eligible: dict[int, CourseEmailEntry] = {}
@@ -300,11 +319,11 @@ def _enroll_course_addresses(
 def enroll_course_student(
     authenticated_faculty_id: int, course_id: str | int, email: str
 ) -> EnrollmentSummary:
-    address = normalize_course_email(email)
+    address = _validate_bulk_addresses([email])[0]
     return _enroll_course_addresses(
         authenticated_faculty_id,
         course_id,
-        CourseEmailParse(
+        BulkEmailParse(
             addresses=[CourseEmailEntry(email=address, line=1, reason="")],
             invalid_lines=[],
         ),
@@ -317,7 +336,9 @@ def bulk_enroll_course_students(
     filename: str,
     data: bytes,
 ) -> EnrollmentSummary:
-    parsed = parse_course_email_file(filename, data)
+    if not isinstance(filename, str) or Path(filename).suffix.lower() != ".txt":
+        raise ValueError("Choose one UTF-8 .txt file.")
+    parsed = parse_bulk_email_file(filename, data)
     return _enroll_course_addresses(authenticated_faculty_id, course_id, parsed)
 
 

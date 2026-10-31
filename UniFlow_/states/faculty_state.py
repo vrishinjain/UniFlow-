@@ -424,7 +424,7 @@ class FacultyState(rx.State):
                     "invalid_lines": [],
                 }
                 if action == "add":
-                    self.enrollment_email = email.strip()
+                    self.enrollment_email = email.strip().lower()
         faculty_id = int(account.id)
         detail = None
         summary = None

@@ -13,7 +13,7 @@ from scripts.test_faculty_courses import CourseStateHarness, consume
 
 class CourseParserTests(unittest.TestCase):
     def test_header_crlf_normalization_dedup_and_line_numbers(self):
-        parsed = users.parse_course_email_file(
+        parsed = users.parse_bulk_email_file(
             "students.TXT",
             b"\xef\xbb\xbf\r\n EMAIL \r\n Alice@Example.edu \r\nalice@example.edu\r\n\r\nbad address\r\nbob@example.edu\r\n",
         )
@@ -36,12 +36,12 @@ class CourseParserTests(unittest.TestCase):
         )
 
     def test_only_first_nonblank_header_is_skipped(self):
-        parsed = users.parse_course_email_file(
+        parsed = users.parse_bulk_email_file(
             "s.txt", b"email\nemail\na@example.edu"
         )
         self.assertEqual(parsed["invalid_lines"][0]["line"], 2)
         self.assertEqual(parsed["addresses"][0]["line"], 3)
-        parsed = users.parse_course_email_file(
+        parsed = users.parse_bulk_email_file(
             "s.txt", b"bad\nemail\na@example.edu"
         )
         self.assertEqual(
@@ -49,7 +49,7 @@ class CourseParserTests(unittest.TestCase):
         )
 
     def test_partial_and_all_invalid_files(self):
-        parsed = users.parse_course_email_file(
+        parsed = users.parse_bulk_email_file(
             "s.txt",
             b"a..b@example.edu\na@-example.edu\na@example.edu\na@example.edu\na@example.edu\x00",
         )
@@ -59,7 +59,7 @@ class CourseParserTests(unittest.TestCase):
         )
         self.assertEqual(
             len(
-                users.parse_course_email_file("s.txt", b"bad\nworse")[
+                users.parse_bulk_email_file("s.txt", b"bad\nworse")[
                     "invalid_lines"
                 ]
             ),
@@ -68,7 +68,7 @@ class CourseParserTests(unittest.TestCase):
 
     def test_file_rejections(self):
         cases = [
-            ("s.csv", b"a@example.edu"),
+            ("s.csv", b"email,name\na@example.edu,Name"),
             ("s.pdf", b"a@example.edu"),
             ("", b"a@example.edu"),
             ("s.txt", b"\xff"),
@@ -87,15 +87,15 @@ class CourseParserTests(unittest.TestCase):
             for filename, data in cases:
                 with self.subTest(filename=filename, size=len(data)):
                     with self.assertRaises(ValueError):
-                        users.parse_course_email_file(filename, data)
+                        users.parse_bulk_email_file(filename, data)
 
     def test_limits_before_dedup_and_exact_byte_boundary(self):
-        parsed = users.parse_course_email_file(
+        parsed = users.parse_bulk_email_file(
             "s.txt", b"email\n" + b"a@example.edu\n" * 500
         )
         self.assertEqual(len(parsed["addresses"]), 1)
         self.assertEqual(
-            users.parse_course_email_file(
+            users.parse_bulk_email_file(
                 "s.txt",
                 b"a@example.edu\n".ljust(users.BULK_EMAIL_MAX_BYTES, b" "),
             )["addresses"][0]["email"],
@@ -115,7 +115,7 @@ class CourseParserTests(unittest.TestCase):
         ]
         for value in values:
             with self.subTest(value=value):
-                parsed = users.parse_course_email_file("s.txt", value.encode())
+                parsed = users.parse_bulk_email_file("s.txt", value.encode())
                 if parsed["addresses"]:
                     self.assertEqual(
                         users.normalize_course_email(value),
@@ -127,20 +127,24 @@ class CourseParserTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             users.normalize_course_email("email")
 
-    def test_admin_behavior_remains_strict_and_case_sensitive(self):
+    def test_admin_and_faculty_share_result_contract(self):
+        data = b"email\nAlice@example.edu\nalice@example.edu\nbad"
+        txt = users.parse_bulk_email_file("s.txt", data)
+        csv = users.parse_bulk_email_file("s.csv", data)
+        self.assertEqual(txt, csv)
         self.assertEqual(
-            users.parse_bulk_email_file(
-                "s.txt", b"email\nAlice@example.edu\nalice@example.edu"
-            ),
-            ["Alice@example.edu", "alice@example.edu"],
+            txt["addresses"],
+            [{"email": "alice@example.edu", "line": 2, "reason": ""}],
         )
-        self.assertEqual(
-            users.parse_bulk_email_file("s.csv", b'email\n"Alice@example.edu"'),
-            ["Alice@example.edu"],
-        )
-        for data in (b"a@example.edu\na@example.edu", b"a@example.edu\nbad"):
-            with self.assertRaises(ValueError):
-                users.parse_bulk_email_file("s.txt", data)
+        self.assertEqual(txt["invalid_lines"][0]["line"], 4)
+
+    def test_faculty_service_rejects_csv_before_database_access(self):
+        with patch.object(courses, "_transaction") as transaction:
+            with self.assertRaisesRegex(ValueError, r"\.txt"):
+                courses.bulk_enroll_course_students(
+                    12, 7, "s.csv", b"a@example.edu"
+                )
+            transaction.assert_not_called()
 
 
 class CourseAuthorizationTests(unittest.TestCase):
@@ -358,6 +362,128 @@ class CourseAuthorizationTests(unittest.TestCase):
         self.assertEqual(insert_params["student_ids"], [21])
         self.assertNotIn(22, insert_params["student_ids"])
         self.assertNotIn(23, insert_params["student_ids"])
+
+    def test_ambiguous_case_variants_are_never_enrolled(self):
+        session = MagicMock()
+        session.execute.side_effect = [
+            MagicMock(
+                first=lambda: SimpleNamespace(role="faculty", status="active")
+            ),
+            MagicMock(
+                first=lambda: SimpleNamespace(
+                    name="Course", code="CS", term="Fall"
+                )
+            ),
+            MagicMock(
+                all=lambda: [
+                    SimpleNamespace(
+                        id=21,
+                        email="Alice@example.edu",
+                        role="student",
+                        status="active",
+                    ),
+                    SimpleNamespace(
+                        id=22,
+                        email="alice@example.edu",
+                        role="student",
+                        status="active",
+                    ),
+                ]
+            ),
+        ]
+        with patch.object(courses, "_transaction") as transaction:
+            transaction.return_value.__enter__.return_value = session
+            summary = courses.bulk_enroll_course_students(
+                12, 7, "s.txt", b" ALICE@example.edu \nalice@example.edu\nbad"
+            )
+        self.assertEqual(summary["added"], [])
+        self.assertEqual(len(summary["not_student"]), 1)
+        self.assertIn("Ambiguous", summary["not_student"][0]["reason"])
+        self.assertEqual(summary["invalid_lines"][0]["line"], 3)
+        self.assertEqual(session.execute.call_count, 3)
+        self.assertEqual(
+            session.execute.call_args.args[1]["emails"], ["alice@example.edu"]
+        )
+
+    def test_all_invalid_checks_ownership_without_account_reads_or_writes(self):
+        session = MagicMock()
+        session.execute.side_effect = [
+            MagicMock(
+                first=lambda: SimpleNamespace(role="faculty", status="active")
+            ),
+            MagicMock(
+                first=lambda: SimpleNamespace(
+                    name="Course", code="CS", term="Fall"
+                )
+            ),
+        ]
+        with patch.object(courses, "_transaction") as transaction:
+            transaction.return_value.__enter__.return_value = session
+            summary = courses.bulk_enroll_course_students(
+                12, 7, "s.txt", b"bad\nworse"
+            )
+        self.assertEqual(len(summary["invalid_lines"]), 2)
+        self.assertEqual(summary["added"], [])
+        self.assertEqual(session.execute.call_count, 2)
+
+    def test_direct_invalid_addresses_fail_before_transaction(self):
+        with patch.object(courses, "_transaction") as transaction:
+            for entries in (
+                [],
+                [{"email": "bad", "line": 1, "reason": ""}],
+                [{"email": "a@example.edu", "line": 1, "reason": ""}] * 501,
+            ):
+                with self.assertRaises(ValueError):
+                    courses._enroll_course_addresses(
+                        12, 7, {"addresses": entries, "invalid_lines": []}
+                    )
+            transaction.assert_not_called()
+
+    def test_direct_mixed_case_duplicate_entries_enroll_only_once(self):
+        session = MagicMock()
+        session.execute.side_effect = [
+            MagicMock(
+                first=lambda: SimpleNamespace(role="faculty", status="active")
+            ),
+            MagicMock(
+                first=lambda: SimpleNamespace(
+                    name="Course", code="CS", term="Fall"
+                )
+            ),
+            MagicMock(
+                all=lambda: [
+                    SimpleNamespace(
+                        id=21,
+                        email="Alice@Example.edu",
+                        role="student",
+                        status="active",
+                    )
+                ]
+            ),
+            MagicMock(all=lambda: [SimpleNamespace(student_id=21)]),
+        ]
+        with patch.object(courses, "_transaction") as transaction:
+            transaction.return_value.__enter__.return_value = session
+            summary = courses._enroll_course_addresses(
+                12,
+                7,
+                {
+                    "addresses": [
+                        {
+                            "email": " Alice@Example.edu ",
+                            "line": 2,
+                            "reason": "",
+                        },
+                        {"email": "alice@example.edu", "line": 3, "reason": ""},
+                    ],
+                    "invalid_lines": [],
+                },
+            )
+        self.assertEqual(
+            summary["added"],
+            [{"email": "alice@example.edu", "line": 2, "reason": ""}],
+        )
+        self.assertEqual(session.execute.call_args.args[1]["student_ids"], [21])
 
 
 class CourseDetailAccessTests(unittest.IsolatedAsyncioTestCase):

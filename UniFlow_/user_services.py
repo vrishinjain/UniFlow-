@@ -109,10 +109,19 @@ def _insert_user(
     role: str,
     status: str,
 ) -> User:
-    if (
-        session.scalar(select(User.id).where(User.email == email).limit(1))
-        is not None
-    ):
+    email = _required_text(email, "Email").lower()
+    session.execute(text("LOCK TABLE public.users IN SHARE ROW EXCLUSIVE MODE"))
+    matches = session.execute(
+        text(
+            "SELECT id FROM public.users WHERE lower(btrim(email)) = :email LIMIT 2"
+        ),
+        {"email": email},
+    ).all()
+    if len(matches) > 1:
+        raise ValueError(
+            "This email matches multiple existing accounts. Contact an administrator; nothing was changed."
+        )
+    if matches:
         raise ValueError("A user with that email already exists.")
     user = User(
         full_name=full_name,
@@ -130,15 +139,14 @@ def _insert_user(
 def create_user(full_name: str, email: str, password: str, role: str) -> User:
     """Create a pending user; return a detached, fully loaded User after commit.
 
-    Email matching preserves PostgreSQL's case-sensitive text uniqueness; surrounding
-    whitespace is stripped consistently on creation and lookup.
+    New emails are lowercase; case-insensitive identity checks serialize with imports.
     """
     if not isinstance(role, str) or role not in _ALLOWED_ROLES:
         raise ValueError(
             "Invalid role. Expected system_admin, program_admin, faculty, student, or sponsor."
         )
     name = _required_text(full_name, "Full name")
-    address = _required_text(email, "Email")
+    address = _required_text(email, "Email").lower()
     password_hash = _hash_password(password)
     with _transaction() as session:
         user = _insert_user(
@@ -149,11 +157,24 @@ def create_user(full_name: str, email: str, password: str, role: str) -> User:
 
 def get_user_by_email(email: str) -> User | None:
     """Return the matching user, or None when no matching email exists."""
-    address = _required_text(email, "Email")
+    address = _required_text(email, "Email").lower()
     with _transaction() as session:
-        user = session.scalar(
-            select(User).where(User.email == address).limit(1)
+        matches = list(
+            session.scalars(
+                select(User).from_statement(
+                    text(
+                        "SELECT id, full_name, email, password_hash, role, status, created_at, must_change_password "
+                        "FROM public.users WHERE lower(btrim(email)) = :email LIMIT 2"
+                    )
+                ),
+                {"email": address},
+            ).all()
         )
+        if len(matches) > 1:
+            raise ValueError(
+                "This email matches multiple existing accounts. Contact an administrator."
+            )
+        user = matches[0] if matches else None
     return user
 
 
@@ -342,62 +363,13 @@ class CourseEmailEntry(TypedDict):
     reason: str
 
 
-class CourseEmailParse(TypedDict):
+class BulkEmailParse(TypedDict):
     addresses: list[CourseEmailEntry]
     invalid_lines: list[CourseEmailEntry]
 
 
 def normalize_course_email(value: str) -> str:
-    address = _required_text(value, "Email").lower()
-    if not _is_valid_email(address):
-        raise ValueError("Enter a valid email address.")
-    return address
-
-
-def parse_course_email_file(filename: str, data: bytes) -> CourseEmailParse:
-    if not isinstance(filename, str) or Path(filename).suffix.lower() != ".txt":
-        raise ValueError("Choose one UTF-8 .txt file.")
-    if not isinstance(data, bytes) or len(data) > BULK_EMAIL_MAX_BYTES:
-        raise ValueError("The file exceeds 1 MB. Nothing was changed.")
-    try:
-        content = data.decode("utf-8-sig")
-    except UnicodeError as e:
-        logging.exception(f"Error: {e}")
-        raise ValueError(
-            "The file must use UTF-8 encoding. Nothing was changed."
-        ) from e
-    addresses: list[CourseEmailEntry] = []
-    invalid: list[CourseEmailEntry] = []
-    seen: set[str] = set()
-    count = 0
-    first = True
-    for line, value in enumerate(content.splitlines(), start=1):
-        address = value.strip().lower()
-        if not address:
-            continue
-        if first and address == "email":
-            first = False
-            continue
-        first = False
-        count += 1
-        if count > BULK_EMAIL_MAX_ADDRESSES:
-            raise ValueError(
-                "A file may contain at most 500 nonblank address lines. Nothing was changed."
-            )
-        if not _is_valid_email(address):
-            invalid.append(
-                CourseEmailEntry(
-                    email=address, line=line, reason="Invalid email syntax"
-                )
-            )
-        elif address not in seen:
-            seen.add(address)
-            addresses.append(
-                CourseEmailEntry(email=address, line=line, reason="")
-            )
-    if not count:
-        raise ValueError("The file contains no email addresses.")
-    return CourseEmailParse(addresses=addresses, invalid_lines=invalid)
+    return _validate_bulk_addresses([value])[0]
 
 
 def _validate_bulk_addresses(addresses: list[str]) -> list[str]:
@@ -410,24 +382,57 @@ def _validate_bulk_addresses(addresses: list[str]) -> list[str]:
     validated: list[str] = []
     seen: set[str] = set()
     for index, value in enumerate(addresses, start=1):
-        address = _required_text(value, f"Email at entry {index}")
+        address = _required_text(value, f"Email at entry {index}").lower()
         if not _is_valid_email(address):
             raise ValueError(
                 f"Invalid email at entry {index}: {address}. Nothing was changed."
             )
         if address in seen:
-            raise ValueError(
-                f"Duplicate email at entry {index}: {address}. Remove duplicates; nothing was changed."
-            )
+            continue
         seen.add(address)
         validated.append(address)
     return validated
 
 
-def parse_bulk_email_file(filename: str, data: bytes) -> list[str]:
-    extension = Path(filename).suffix.lower()
-    if extension not in {".txt", ".csv"}:
+def _bulk_file_rows(
+    content: str, extension: str
+) -> Iterator[tuple[int, str, int]]:
+    if extension == ".txt":
+        for line, value in enumerate(content.splitlines(), start=1):
+            yield line, value, 1
+        return
+    reader = csv.reader(io.StringIO(content, newline=""), strict=True)
+    source_lines = content.splitlines()
+    previous_line = 0
+    try:
+        for row in reader:
+            line = previous_line + 1
+            nonblank_lines = sum(
+                bool(value.strip())
+                for value in source_lines[previous_line : reader.line_num]
+            )
+            previous_line = reader.line_num
+            if len(row) > 1:
+                raise ValueError(
+                    f"Line {line} has multiple columns. Use exactly one email column; nothing was changed."
+                )
+            yield line, row[0] if row else "", nonblank_lines
+    except csv.Error as e:
+        logging.exception(f"Error: {e}")
+        raise ValueError(
+            f"The CSV is malformed near line {reader.line_num}. Use one email per row; nothing was changed."
+        ) from e
+
+
+def parse_bulk_email_file(filename: str, data: bytes) -> BulkEmailParse:
+    """Parse without database access; structural errors reject, invalid addresses skip."""
+    if not isinstance(filename, str) or Path(filename).suffix.lower() not in {
+        ".txt",
+        ".csv",
+    }:
         raise ValueError("Choose a UTF-8 .txt or one-column .csv file.")
+    if not isinstance(data, bytes):
+        raise ValueError("The file must contain UTF-8 bytes.")
     if len(data) > BULK_EMAIL_MAX_BYTES:
         raise ValueError("The file exceeds 1 MB. Nothing was changed.")
     try:
@@ -437,34 +442,40 @@ def parse_bulk_email_file(filename: str, data: bytes) -> list[str]:
         raise ValueError(
             "The file must use UTF-8 encoding. Nothing was changed."
         ) from e
-    addresses: list[str] = []
-    try:
-        rows = (
-            csv.reader(io.StringIO(content, newline=""), strict=True)
-            if extension == ".csv"
-            else ([line] for line in content.splitlines())
-        )
-        for row_number, row in enumerate(rows, start=1):
-            if not row or (len(row) == 1 and not row[0].strip()):
-                continue
-            if len(row) != 1:
-                raise ValueError(
-                    f"Row {row_number} has multiple columns. Use exactly one email column; nothing was changed."
+    addresses: list[CourseEmailEntry] = []
+    invalid_lines: list[CourseEmailEntry] = []
+    seen: set[str] = set()
+    first = True
+    count = 0
+    for line, value, input_lines in _bulk_file_rows(
+        content, Path(filename).suffix.lower()
+    ):
+        address = value.strip().lower()
+        if not address:
+            continue
+        if first and address == "email":
+            first = False
+            continue
+        first = False
+        count += input_lines
+        if count > BULK_EMAIL_MAX_ADDRESSES:
+            raise ValueError(
+                "A file may contain at most 500 nonblank address lines. Nothing was changed."
+            )
+        if not _is_valid_email(address):
+            invalid_lines.append(
+                CourseEmailEntry(
+                    email=address, line=line, reason="Invalid email syntax"
                 )
-            address = row[0].strip()
-            if not addresses and address.lower() == "email":
-                # Only the first nonblank row may be a header.
-                addresses.append("")
-                continue
-            addresses.append(address)
-    except csv.Error as e:
-        logging.exception(f"Error: {e}")
-        raise ValueError(
-            "The CSV is malformed. Use one email per row; nothing was changed."
-        ) from e
-    if addresses and addresses[0] == "":
-        addresses.pop(0)
-    return _validate_bulk_addresses(addresses)
+            )
+        elif address not in seen:
+            seen.add(address)
+            addresses.append(
+                CourseEmailEntry(email=address, line=line, reason="")
+            )
+    if not count:
+        raise ValueError("The file contains no email addresses.")
+    return BulkEmailParse(addresses=addresses, invalid_lines=invalid_lines)
 
 
 def _temporary_password() -> str:
@@ -508,11 +519,18 @@ def bulk_approve_emails(
             )
         rows = session.execute(
             text(
-                "SELECT id, email, status FROM public.users WHERE email = ANY(:emails)"
+                "SELECT id, email, status FROM public.users WHERE lower(btrim(email)) = ANY(:emails)"
             ),
             {"emails": emails},
         ).all()
-        existing = {str(row.email): row for row in rows}
+        existing = {}
+        for row in rows:
+            address = str(row.email).strip().lower()
+            if address in existing:
+                raise ValueError(
+                    "An email matches multiple existing accounts. Contact an administrator; nothing was changed."
+                )
+            existing[address] = row
         inserts: list[dict[str, str]] = []
         updates: list[dict[str, str | int]] = []
         issued_passwords: set[str] = set()
