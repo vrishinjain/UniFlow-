@@ -10,6 +10,8 @@ from UniFlow_.user_services import (
     activate_user,
     BULK_EMAIL_MAX_BYTES,
     BulkEmailResult,
+    BulkEmailParse,
+    CourseEmailEntry,
     bulk_approve_emails,
     parse_bulk_email_file,
     change_pending_user_role,
@@ -51,6 +53,16 @@ class AdminState(rx.State):
     import_message: str = ""
     import_error: bool = False
     importing: bool = False
+    _import_epoch: int = 0
+    _pending_import: tuple[int, BulkEmailParse] = (
+        0,
+        {"addresses": [], "invalid_lines": []},
+    )
+    _import_invalid_lines: list[CourseEmailEntry] = []
+
+    @rx.var
+    def import_invalid_lines(self) -> list[CourseEmailEntry]:
+        return self._import_invalid_lines if self._authorized else []
 
     @rx.var
     def bulk_results(self) -> list[BulkEmailResult]:
@@ -79,6 +91,9 @@ class AdminState(rx.State):
         return self._authorized
 
     def _clear_import(self):
+        self._import_epoch += 1
+        self._pending_import = (0, {"addresses": [], "invalid_lines": []})
+        self._import_invalid_lines = []
         self._bulk_results = []
         self.import_message = ""
         self.import_error = False
@@ -287,25 +302,19 @@ class AdminState(rx.State):
 
     @rx.event
     def dismiss_import_results(self):
-        self._clear_import()
+        if not self.importing:
+            self._clear_import()
 
     @rx.event
     async def import_emails(self, files: list[rx.UploadFile]):
-        self._clear_import()
-        if self.loading:
-            self.import_error = True
-            self.import_message = (
-                "Wait for the current operation to finish, then try again."
-            )
+        if self.loading or self.importing:
             yield rx.clear_selected_files("admin_bulk_emails")
             return
-        self.loading = True
-        self.importing = True
-        self.import_message = "Validating the file and preparing accounts… Larger imports may take several minutes."
-        yield
-        results: list[BulkEmailResult] = []
+        self._clear_import()
         try:
-            if not await self._authorize():
+            login = await self.get_state(LoginState)
+            if not login._session_user_id or not self._authorized:
+                self._clear_access()
                 yield rx.redirect("/")
                 return
             if len(files) != 1:
@@ -314,16 +323,67 @@ class AdminState(rx.State):
                 )
             file = files[0]
             data = await file.read(BULK_EMAIL_MAX_BYTES + 1)
-            addresses = parse_bulk_email_file(file.name or "", data)
-            login = await self.get_state(LoginState)
-            results = await asyncio.to_thread(
-                bulk_approve_emails, login._session_user_id, addresses
+            parsed = parse_bulk_email_file(file.name or "", data)
+            self._pending_import = (login._session_user_id, parsed)
+            self.loading = True
+            self.importing = True
+            self.import_message = "Validating access and preparing accounts… Larger imports may take several minutes."
+            yield AdminState.process_email_import(self._import_epoch)
+        except ValueError as e:
+            logging.exception(f"Error: {e}")
+            self.import_error = True
+            self.import_message = str(e)
+        except Exception as e:
+            logging.exception(f"Error: {e}")
+            self.import_error = True
+            self.import_message = (
+                "The selected file could not be read. No accounts were changed."
             )
-            if not await self._refresh():
-                results.clear()
-                yield rx.redirect("/")
+        finally:
+            yield rx.clear_selected_files("admin_bulk_emails")
+
+    async def _verify_import_access(self, user_id: int, epoch: int) -> bool:
+        async with self:
+            login = await self.get_state(LoginState)
+            if epoch != self._import_epoch or login._session_user_id != user_id:
+                return False
+        user = await asyncio.to_thread(get_user_by_id, user_id)
+        if (
+            user is None
+            or user.role != "system_admin"
+            or user.status != "active"
+        ):
+            raise PermissionError("Administrator access was lost.")
+        async with self:
+            login = await self.get_state(LoginState)
+            return (
+                epoch == self._import_epoch
+                and login._session_user_id == user_id
+                and self._authorized
+            )
+
+    @rx.event(background=True)
+    async def process_email_import(self, epoch: int):
+        async with self:
+            if epoch != self._import_epoch or not self.importing:
                 return
-            self._bulk_results = results
+            user_id, parsed = self._pending_import
+            if not user_id:
+                return
+            self._pending_import = (0, {"addresses": [], "invalid_lines": []})
+        committed = False
+        try:
+            if not await self._verify_import_access(user_id, epoch):
+                return
+            addresses = [entry["email"] for entry in parsed["addresses"]]
+            results: list[BulkEmailResult] = []
+            if addresses:
+                results = await asyncio.to_thread(
+                    bulk_approve_emails, user_id, addresses
+                )
+                committed = True
+            if not await self._verify_import_access(user_id, epoch):
+                return
             created = sum(row["outcome"] == "Created" for row in results)
             reactivated = sum(
                 row["outcome"] == "Reactivated" for row in results
@@ -331,24 +391,102 @@ class AdminState(rx.State):
             unchanged = sum(
                 row["outcome"] == "Already approved" for row in results
             )
-            self.import_message = f"Import complete: {created} created, {reactivated} reactivated, {unchanged} already approved (unchanged)."
-            if self.error or self.approved_error:
-                self.import_message = f"{self.import_message} Accounts were saved, but a dashboard list could not refresh. Use Refresh; keep these credentials before leaving."
+            skipped = len(parsed["invalid_lines"])
+            message = (
+                f"Import complete: {len(addresses)} unique valid addresses; {created} created, {reactivated} reactivated, {unchanged} already approved (unchanged). {skipped} invalid lines skipped."
+                if addresses
+                else f"No valid email addresses were found. {skipped} invalid lines skipped; no accounts were changed. Correct the lines below and upload again."
+            )
+            requests: list[PendingRequest] = []
+            approved: list[ApprovedUser] = []
+            refresh_failed = False
+            if addresses:
+                try:
+                    pending_users, active_users = await asyncio.gather(
+                        asyncio.to_thread(list_pending_users),
+                        asyncio.to_thread(list_active_users),
+                    )
+                    requests = [
+                        PendingRequest(
+                            id=int(user.id),
+                            full_name=str(user.full_name),
+                            email=str(user.email),
+                            role=str(user.role),
+                            date_label=user.created_at.strftime(
+                                "%b %d, %Y · %H:%M %Z"
+                            ),
+                            date_iso=user.created_at.isoformat(),
+                        )
+                        for user in pending_users
+                    ]
+                    labels = {
+                        "system_admin": "System admin",
+                        "program_admin": "Program admin",
+                        "faculty": "Faculty",
+                        "student": "Student",
+                        "sponsor": "Sponsor",
+                    }
+                    approved = [
+                        ApprovedUser(
+                            id=int(user.id),
+                            full_name=str(user.full_name),
+                            email=str(user.email),
+                            role=labels.get(
+                                user.role, user.role.replace("_", " ").title()
+                            ),
+                        )
+                        for user in active_users
+                    ]
+                except Exception as e:
+                    logging.exception(f"Error: {e}")
+                    refresh_failed = True
+                    message = f"{message} Accounts were saved, but dashboard lists could not refresh. Use Refresh; keep these credentials before leaving."
+            if not await self._verify_import_access(user_id, epoch):
+                return
+            async with self:
+                login = await self.get_state(LoginState)
+                if (
+                    epoch != self._import_epoch
+                    or login._session_user_id != user_id
+                ):
+                    return
+                self._bulk_results = results
+                self._import_invalid_lines = parsed["invalid_lines"]
+                self.import_error = not addresses
+                self.import_message = message
+                if addresses and not refresh_failed:
+                    self.requests = requests
+                    self.approved_users = approved
+                    self.error = False
+                    self.approved_error = False
+                    self.revision += 1
         except PermissionError as e:
             logging.exception(f"Error: {e}")
-            self._clear_access()
+            async with self:
+                if epoch != self._import_epoch:
+                    return
+                self._clear_access()
             yield rx.redirect("/")
-        except ValueError as e:
-            self.import_error = True
-            self.import_message = str(e)
         except Exception as e:
             logging.exception(f"Error: {e}")
-            self.import_error = True
-            self.import_message = "The import could not be completed. No accounts were changed. Please try again."
+            async with self:
+                if epoch != self._import_epoch:
+                    return
+                self._bulk_results = []
+                self._import_invalid_lines = parsed["invalid_lines"]
+                self.import_error = True
+                self.import_message = (
+                    "Accounts were saved, but access could not be verified. Credentials cannot be displayed; contact an administrator before retrying."
+                    if committed
+                    else str(e)
+                    if isinstance(e, ValueError)
+                    else "The import could not be completed. No accounts were changed. Please try again."
+                )
         finally:
-            self.loading = False
-            self.importing = False
-            yield rx.clear_selected_files("admin_bulk_emails")
+            async with self:
+                if epoch == self._import_epoch:
+                    self.loading = False
+                    self.importing = False
 
     @rx.event
     async def logout(self):
