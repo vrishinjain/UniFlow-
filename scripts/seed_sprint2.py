@@ -21,8 +21,8 @@ TEST_USERS = (
 )
 
 PROJECTS = (
-    ("Sample Project 1", "Sample project for testing", "submitted"),
-    ("Sample Project 2", "Sample project for testing", "submitted"),
+    ("Sample Project 1", "Sample project for testing", "pending"),
+    ("Sample Project 2", "Sample project for testing", "pending"),
 )
 
 

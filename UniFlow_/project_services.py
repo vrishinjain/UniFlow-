@@ -138,7 +138,7 @@ def submit_project(
                     "sponsor_id": sponsor_id,
                     "title": title,
                     "description": description,
-                    "status": "submitted",
+                    "status": "pending",
                 },
             ).scalar_one()
         )
