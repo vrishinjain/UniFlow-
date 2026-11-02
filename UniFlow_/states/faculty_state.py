@@ -284,7 +284,13 @@ class FacultyState(rx.State):
         self._authorized = True
 
         path = self.router.page.path.rstrip("/")
-        if path == "/faculty/courses" or path.startswith("/faculty/course/"):
+        # Start the course loaders from here (not from on_load) so they always
+        # run after _clear_access() above has bumped _courses_epoch.
+        if path == "/faculty/courses":
+            yield FacultyState.load_courses
+            return
+        if path.startswith("/faculty/course/"):
+            yield FacultyState.load_course_detail
             return
 
         try:
