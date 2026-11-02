@@ -94,46 +94,51 @@ def student_projects_portal() -> rx.Component:
         "/student/projects",
         rx.el.div(
             page_header("Student", "My Projects"),
-            rx.match(
-                True,
-                (
-                    StudentProjectsState.loading
-                    | ~StudentProjectsState.authorized,
+            rx.cond(
+                StudentProjectsState.loading,
+                rx.el.p(
+                    "Loading projects…",
+                    role="status",
+                    class_name="py-12 text-center text-sm text-[#667078]",
+                ),
+                rx.cond(
+                    StudentProjectsState.authorized == False,
                     rx.el.p(
                         "Loading projects…",
                         role="status",
                         class_name="py-12 text-center text-sm text-[#667078]",
                     ),
-                ),
-                (
-                    StudentProjectsState.error != "",
-                    rx.el.div(
-                        rx.el.p(
-                            StudentProjectsState.error,
-                            role="alert",
-                            class_name="text-sm text-red-700",
+                    rx.cond(
+                        StudentProjectsState.error != "",
+                        rx.el.div(
+                            rx.el.p(
+                                StudentProjectsState.error,
+                                role="alert",
+                                class_name="text-sm text-red-700",
+                            ),
+                            rx.el.button(
+                                "Try again",
+                                type="button",
+                                on_click=StudentProjectsState.load_student_projects,
+                                class_name="mt-4 rounded-lg bg-[#246D67] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1C5752] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F]",
+                            ),
+                            class_name="rounded-2xl border border-[#E2E4DC] bg-white p-6",
                         ),
-                        rx.el.button(
-                            "Try again",
-                            type="button",
-                            on_click=StudentProjectsState.load_student_projects,
-                            class_name="mt-4 rounded-lg bg-[#246D67] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1C5752] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F]",
+                        rx.cond(
+                            StudentProjectsState.projects.length() == 0,
+                            rx.el.p(
+                                "No projects have been shared with your courses yet.",
+                                class_name="rounded-2xl border border-[#E2E4DC] bg-white px-6 py-12 text-center text-sm text-[#667078]",
+                            ),
+                            rx.el.div(
+                                rx.foreach(
+                                    StudentProjectsState.projects,
+                                    shared_project_card,
+                                ),
+                                class_name="grid w-full gap-4 sm:grid-cols-2",
+                            ),
                         ),
-                        class_name="rounded-2xl border border-[#E2E4DC] bg-white p-6",
                     ),
-                ),
-                (
-                    StudentProjectsState.projects.length() == 0,
-                    rx.el.p(
-                        "No projects have been shared with your courses yet.",
-                        class_name="rounded-2xl border border-[#E2E4DC] bg-white px-6 py-12 text-center text-sm text-[#667078]",
-                    ),
-                ),
-                rx.el.div(
-                    rx.foreach(
-                        StudentProjectsState.projects, shared_project_card
-                    ),
-                    class_name="grid w-full gap-4 sm:grid-cols-2",
                 ),
             ),
         ),
@@ -229,30 +234,30 @@ def student_project_detail_portal() -> rx.Component:
                 ),
                 rx.fragment(),
             ),
-            rx.match(
-                True,
-                (
-                    StudentProjectDetailState.loading
-                    | ~StudentProjectDetailState.authorized,
+            rx.cond(
+                StudentProjectDetailState.loading,
+                rx.el.p(
+                    "Loading project…",
+                    role="status",
+                    class_name="py-12 text-center text-sm text-[#667078]",
+                ),
+                rx.cond(
+                    StudentProjectDetailState.authorized == False,
                     rx.el.p(
                         "Loading project…",
                         role="status",
                         class_name="py-12 text-center text-sm text-[#667078]",
                     ),
-                ),
-                (
-                    StudentProjectDetailState.ready
-                    & (
-                        StudentProjectDetailState.selected_project_id
-                        == rx.State.project_id
+                    rx.cond(
+                        StudentProjectDetailState.ready,
+                        student_project_detail_content(),
+                        rx.el.button(
+                            "Try again",
+                            type="button",
+                            on_click=StudentProjectDetailState.load_student_project_detail,
+                            class_name="rounded-lg bg-[#246D67] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1C5752] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F]",
+                        ),
                     ),
-                    student_project_detail_content(),
-                ),
-                rx.el.button(
-                    "Try again",
-                    type="button",
-                    on_click=StudentProjectDetailState.load_student_project_detail,
-                    class_name="rounded-lg bg-[#246D67] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1C5752] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F]",
                 ),
             ),
         ),
