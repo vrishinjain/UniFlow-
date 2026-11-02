@@ -4,7 +4,7 @@
 **Sprint:** Sprint 2  
 **Tester:** Keerthi  
 **Status:** Testing completed; branch verification pending  
-**Pull Request:** #49
+**Pull Request:** #57
 
 ## 1. Purpose
 
@@ -12,7 +12,7 @@ This document records the Sprint 2 testing results for UniFlow. The tests cover 
 
 The checklist includes role-based dashboards, sponsor project submissions, faculty project details, file downloads, and access restrictions.
 
-All 22 manual tests were reported as passed by the tester. Eight automated project submission tests also passed.
+The 22 completed manual tests were reported as passed by the tester; two additional T-13 roster import cases are pending. Eight automated project submission tests also passed.
 
 ## 2. Test Checklist
 
@@ -40,6 +40,8 @@ All 22 manual tests were reported as passed by the tester. Eight automated proje
 | TC-20 | US-3 | File download | Download an attached file | Selected file downloads successfully | File downloaded | Pass |
 | TC-21 | US-3 | Faculty access restriction | Sign in as Sponsor and open Faculty project page | Access blocked or redirected | Sponsor access blocked | Pass |
 | TC-22 | US-3 | Student access restriction | Sign in as Student and open Faculty project page | Access blocked or redirected | Student access blocked | Pass |
+| TC-23 | T-13 | Roster import / initial sign-in | Sign in as a newly imported student who has not set a password | Redirect to `/set-password` | Not tested | Pending |
+| TC-24 | T-13 | Roster import / password gate | Try opening `/student` before the imported student sets a password | Access is blocked until a password is set | Not tested | Pending |
 
 ## 3. Manual Test Execution
 
@@ -51,10 +53,10 @@ All 22 manual tests were reported as passed by the tester. Eight automated proje
 |---|---:|
 | Passed | 22 |
 | Failed | 0 |
-| Pending | 0 |
-| Total | 22 |
+| Pending | 2 |
+| Total | 24 |
 
-**Overall manual test result: PASS**
+**Manual test result: 22 completed cases passed; 2 cases are pending verification.**
 
 ## 4. Automated Unit Tests
 
@@ -86,12 +88,13 @@ If any test fails during verification on `develop`, a GitHub bug issue will be c
 
 ## 6. Sprint 2 Test Run Summary
 
-**Manual tests:** 22 passed  
-**Automated tests:** 8 passed  
-**Total recorded tests:** 30 passed  
-**Failed:** 0  
-**Pending test cases:** 0  
-**Verification on `develop`:** Pending confirmation  
+**Manual tests:** 22 passed; 2 pending
+**Automated tests:** 8 passed
+**Total passed:** 30 (22 manual + 8 automated)
+**Failed:** 0
+**Pending:** 2
+**Total test cases:** 32
+**Verification on `develop`:** Pending confirmation, including final verification of the two pending T-13 cases
 **Final approval:** Pending
 
-All recorded tests passed. Final T-10 approval requires confirming the must-have tests on the `develop` branch.
+All 30 completed tests passed. Two manual T-13 cases remain pending; final verification and T-10 approval on the `develop` branch are still pending.
