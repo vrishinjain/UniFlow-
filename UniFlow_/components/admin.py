@@ -1,5 +1,11 @@
 import reflex as rx
 
+from UniFlow_.components.dashboard_layout import (
+    NavItem,
+    dashboard_layout,
+    page_header,
+)
+
 from UniFlow_.states.admin_state import AdminState, ApprovedUser, PendingRequest
 from UniFlow_.components.bulk_email_import import bulk_email_import
 
@@ -110,44 +116,26 @@ def approved_user_row(user: ApprovedUser) -> rx.Component:
     )
 
 
-def admin_dashboard() -> rx.Component:
-    return rx.el.div(
-        rx.el.header(
-            rx.el.div(
-                rx.el.p(
-                    "UniFlow",
-                    class_name="text-2xl font-semibold tracking-tight text-[#172B3D]",
-                ),
-                rx.el.p(
-                    "University identity portal",
-                    class_name="mt-1 text-sm text-[#667078]",
-                ),
-            ),
-            rx.el.button(
-                rx.el.span("↪", custom_attrs={"aria-hidden": "true"}),
-                "Sign out",
-                type="button",
-                on_click=AdminState.logout,
-                class_name="flex items-center gap-2 rounded-lg border border-[#BFCFC9] bg-white px-4 py-2.5 text-sm font-semibold text-[#246D67] hover:bg-[#F0F6F3] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F]",
-            ),
-            class_name="flex items-center justify-between gap-4 border-b border-[#E2E4DC] pb-7",
-        ),
-        rx.el.section(
-            rx.el.p(
-                "SYSTEM ADMINISTRATION",
-                class_name="text-[11px] font-semibold tracking-[0.18em] text-[#28766F]",
-            ),
-            rx.el.h1(
-                "Account requests",
-                class_name="mt-3 text-3xl font-semibold tracking-tight text-[#172B3D]",
-            ),
-            rx.el.p(
-                "Review university account requests and confirm each person's role before approving access.",
-                class_name="mt-3 text-sm leading-6 text-[#667078]",
-            ),
-            class_name="py-9 sm:py-12",
-        ),
-        bulk_email_import(),
+# Sidebar options for the system admin.
+ADMIN_NAV = [
+    NavItem("Account requests", "inbox", "/admin", "Review and approve new account requests."),
+    NavItem("Bulk import", "upload", "/admin/import", "Create student accounts from a list of emails."),
+    NavItem("Approved users", "user-check", "/admin/users", "See every account with active access."),
+]
+
+
+def _page(route: str, content: rx.Component) -> rx.Component:
+    return dashboard_layout(
+        role_label="System admin",
+        nav=ADMIN_NAV,
+        active=route,
+        authorized=AdminState.authorized,
+        content=content,
+    )
+
+
+def _pending_requests_section() -> rx.Component:
+    return (
         rx.el.section(
             rx.el.div(
                 rx.el.div(
@@ -233,7 +221,12 @@ def admin_dashboard() -> rx.Component:
             ),
             custom_attrs={"aria-busy": AdminState.loading},
             class_name="w-full overflow-hidden rounded-2xl border border-[#E2E4DC] bg-white",
-        ),
+    )
+    )
+
+
+def _approved_users_section() -> rx.Component:
+    return (
         rx.el.section(
             rx.el.div(
                 rx.el.div(
@@ -303,34 +296,56 @@ def admin_dashboard() -> rx.Component:
                 ),
             ),
             custom_attrs={"aria-busy": AdminState.loading},
-            class_name="mt-6 w-full overflow-hidden rounded-2xl border border-[#E2E4DC] bg-white",
-        ),
-        rx.el.footer(
-            "One university. Your connection.",
-            class_name="mt-8 text-center text-xs tracking-wide text-[#7B8385]",
-        ),
-        class_name="mx-auto w-full max-w-6xl",
+            class_name="w-full overflow-hidden rounded-2xl border border-[#E2E4DC] bg-white",
+    )
     )
 
 
-def admin_portal() -> rx.Component:
-    return rx.el.main(
-        rx.cond(
-            AdminState.authorized,
-            admin_dashboard(),
-            rx.el.div(
-                rx.el.span(
-                    "✓",
-                    custom_attrs={"aria-hidden": "true"},
-                    class_name="mx-auto block text-2xl leading-7 text-[#28766F]",
-                ),
-                rx.el.p(
-                    "Verifying access…",
-                    class_name="mt-4 text-sm text-[#667078]",
-                ),
-                role="status",
-                class_name="mx-auto py-24 text-center",
+def admin_requests() -> rx.Component:
+    return _page(
+        "/admin",
+        rx.el.div(
+            page_header(
+                "System administration",
+                "Account requests",
+                "Review university account requests and confirm each person's role before approving access.",
             ),
+            _pending_requests_section(),
         ),
-        class_name="min-h-dvh w-full bg-[#F7F6EF] px-5 py-7 font-['Inter',sans-serif] text-[#172B3D] sm:px-8 sm:py-9",
     )
+
+
+def admin_import() -> rx.Component:
+    return _page(
+        "/admin/import",
+        rx.el.div(
+            page_header(
+                "System administration",
+                "Bulk import",
+                "Create student accounts from a list of email addresses. New students set their own password the first time they sign in.",
+            ),
+            bulk_email_import(),
+        ),
+    )
+
+
+def admin_users() -> rx.Component:
+    return _page(
+        "/admin/users",
+        rx.el.div(
+            page_header(
+                "System administration",
+                "Approved users",
+                "Accounts with active access, including system administrators.",
+            ),
+            _approved_users_section(),
+        ),
+    )
+
+
+# (page function, route, browser tab title). All use AdminState.load_admin.
+ADMIN_PAGES = [
+    (admin_requests, "/admin", "Account requests"),
+    (admin_import, "/admin/import", "Bulk import"),
+    (admin_users, "/admin/users", "Approved users"),
+]

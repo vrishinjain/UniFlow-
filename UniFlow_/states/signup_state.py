@@ -42,9 +42,7 @@ class SignupState(rx.State):
             return
 
         full_name = str(form_data.get("full_name", "")).strip()
-        # Same rule as the login page (strip only). If the team decides to
-        # lowercase emails, change it here AND in login_state.py.
-        email = str(form_data.get("email", "")).strip()
+        email = str(form_data.get("email", "")).strip().lower()
         password = str(form_data.get("password", ""))
         confirm = str(form_data.get("confirm_password", ""))
         role = ACCOUNT_TYPES.get(str(form_data.get("account_type", "")))
@@ -56,7 +54,9 @@ class SignupState(rx.State):
             self.message = "Choose an account type."
             return
         if len(password) < MIN_PASSWORD_LENGTH:
-            self.message = f"Password must be at least {MIN_PASSWORD_LENGTH} characters."
+            self.message = (
+                f"Password must be at least {MIN_PASSWORD_LENGTH} characters."
+            )
             return
         if password != confirm:
             self.message = "Passwords don't match."
@@ -67,7 +67,9 @@ class SignupState(rx.State):
         yield  # show "Sending request..." right away
 
         try:
-            await asyncio.to_thread(create_user, full_name, email, password, role)
+            await asyncio.to_thread(
+                create_user, full_name, email, password, role
+            )
             self.submitted = True
             self.submitted_email = email
         except ValueError as e:
@@ -76,6 +78,8 @@ class SignupState(rx.State):
             self.message = str(e)
         except Exception:
             logging.exception("Account request failed")
-            self.message = "Your request couldn't be sent. Try again in a few minutes."
+            self.message = (
+                "Your request couldn't be sent. Try again in a few minutes."
+            )
         finally:
             self.loading = False

@@ -4,13 +4,14 @@ from UniFlow_.components.login import identity_portal
 from UniFlow_.states.signup_state import SignupState
 from UniFlow_.states.login_state import LoginState
 from UniFlow_.states.admin_state import AdminState
-from UniFlow_.components.admin import admin_portal
-from UniFlow_.components.student import student_portal
-from UniFlow_.components.faculty import faculty_portal
-from UniFlow_.components.program_admin import program_admin_portal
-from UniFlow_.components.sponsor import sponsor_portal
+from UniFlow_.components.admin import ADMIN_PAGES
+from UniFlow_.components.student import STUDENT_PAGES
+from UniFlow_.components.faculty import FACULTY_PAGES
+from UniFlow_.components.program_admin import PROGRAM_ADMIN_PAGES
+from UniFlow_.components.sponsor import SPONSOR_PAGES
 from UniFlow_.states.student_state import StudentState
 from UniFlow_.states.faculty_state import FacultyState
+from UniFlow_.states.review_state import ReviewState
 from UniFlow_.states.program_admin_state import ProgramAdminState
 from UniFlow_.states.sponsor_state import SponsorState
 from UniFlow_.components.set_password import set_password_portal
@@ -53,41 +54,31 @@ app.add_page(
 )
 
 
-def admin() -> rx.Component:
-    return admin_portal()
-
-
-app.add_page(
-    admin,
-    route="/admin",
-    title="Admin page · UniFlow",
-    on_load=AdminState.load_admin,
-)
-
-app.add_page(
-    student_portal,
-    route="/student",
-    title="Student Dashboard · UniFlow",
-    on_load=StudentState.load_student,
-)
-app.add_page(
-    faculty_portal,
-    route="/faculty",
-    title="Faculty Dashboard · UniFlow",
-    on_load=FacultyState.load_faculty,
-)
-app.add_page(
-    program_admin_portal,
-    route="/programadmin",
-    title="Program Admin Dashboard · UniFlow",
-    on_load=ProgramAdminState.load_program_admin,
-)
-app.add_page(
-    sponsor_portal,
-    route="/sponsor",
-    title="Sponsor Dashboard · UniFlow",
-    on_load=SponsorState.load_sponsor,
-)
+# Dashboard pages. Each role's pages share that role's access check, so a user
+# can only open pages for their own role. To add a page, edit the role's
+# *_PAGES list in UniFlow_/components/<role>.py.
+for pages, on_load in (
+    (ADMIN_PAGES, AdminState.load_admin),
+    (STUDENT_PAGES, StudentState.load_student),
+    (FACULTY_PAGES, FacultyState.load_faculty),
+    (PROGRAM_ADMIN_PAGES, ProgramAdminState.load_program_admin),
+    (SPONSOR_PAGES, SponsorState.load_sponsor),
+):
+    for page, route, title in pages:
+        page_on_load = on_load
+        if route == "/sponsor/projects":
+            page_on_load = [
+                SponsorState.load_sponsor,
+                SponsorState.load_my_projects,
+            ]
+        elif route == "/faculty/project/[id]":
+            page_on_load = [
+                FacultyState.load_faculty,
+                ReviewState.load_history,
+            ]             
+        app.add_page(
+            page, route=route, title=f"{title} · UniFlow", on_load=page_on_load
+        )
 
 app.add_page(
     set_password_portal,
