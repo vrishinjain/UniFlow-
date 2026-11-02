@@ -20,8 +20,8 @@ STUDENT_NAV = [
     NavItem(
         "My project",
         "folder",
-        "/student/project",
-        "See the project you are assigned to.",
+        "/student/projects",
+        "See projects shared with your courses.",
     ),
     NavItem(
         "Browse projects",
@@ -29,7 +29,6 @@ STUDENT_NAV = [
         "/student/browse",
         "Explore available capstone and research projects.",
     ),
-    NavItem("Projects", "folders", "/student/projects"),
 ]
 
 
@@ -44,27 +43,11 @@ def _page(route: str, content: rx.Component) -> rx.Component:
 
 
 def student_welcome_card() -> rx.Component:
-    return rx.el.div(
-        rx.el.div(
-            rx.el.a(
-                rx.icon("folders", class_name="h-4 w-4"),
-                "Projects",
-                href="/student/projects",
-                class_name="flex w-fit items-center gap-2 rounded-lg border border-[#BFCFC9] bg-white px-3.5 py-2 text-sm font-semibold text-[#246D67] hover:bg-[#F0F6F3] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F]",
-            ),
-            class_name="mb-6 flex justify-end",
-        ),
-        home_content("Student", STUDENT_NAV[:3], StudentState.full_name),
-    )
+    return home_content("Student", STUDENT_NAV, StudentState.full_name)
 
 
 def student_home() -> rx.Component:
     return _page("/student", student_welcome_card())
-
-
-def student_project() -> rx.Component:
-    # Later sprint.
-    return _page("/student/project", coming_soon("Student", STUDENT_NAV[1]))
 
 
 def student_browse() -> rx.Component:
@@ -268,6 +251,5 @@ def student_project_detail_portal() -> rx.Component:
 # with StudentState's on_load check, so every page is protected the same way.
 STUDENT_PAGES = [
     (student_home, "/student", "Student Dashboard"),
-    (student_project, "/student/project", "My project"),
     (student_browse, "/student/browse", "Browse projects"),
 ]
