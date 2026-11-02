@@ -7,10 +7,12 @@ import unittest
 from pathlib import Path
 from contextlib import contextmanager
 from types import MethodType, SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from UniFlow_ import user_services as services
 from UniFlow_.states.admin_state import AdminState
+from UniFlow_.states.login_state import LoginState
+from UniFlow_.states.signup_state import SignupState
 
 
 class FakeSession:
@@ -39,7 +41,7 @@ class FakeSession:
             rows = [
                 row
                 for email, row in self.rows.items()
-                if email in params["emails"]
+                if email.strip().lower() in params["emails"]
             ]
             return SimpleNamespace(all=lambda: rows)
         self.writes += 1
@@ -66,63 +68,103 @@ class FakeSession:
 
 
 class BulkImportTests(unittest.TestCase):
-    def test_valid_files_and_case_sensitive_trimmed_matching(self):
-        self.assertEqual(
-            services.parse_bulk_email_file(
-                "list.TXT",
-                b"\xef\xbb\xbfemail\r\n Alice@example.edu \r\nalice@example.edu\n",
-            ),
-            ["Alice@example.edu", "alice@example.edu"],
+    def test_shared_txt_csv_contract_normalization_and_skipped_lines(self):
+        for extension in ("TXT", "csv"):
+            with self.subTest(extension=extension):
+                parsed = services.parse_bulk_email_file(
+                    f"list.{extension}",
+                    b"\xef\xbb\xbf\r\n EMAIL \r\n Alice@Example.edu \r\nalice@example.edu\r\n\r\nbad address\r\nbob@example.edu\r\nemail",
+                )
+                self.assertEqual(
+                    parsed["addresses"],
+                    [
+                        {"email": "alice@example.edu", "line": 3, "reason": ""},
+                        {"email": "bob@example.edu", "line": 7, "reason": ""},
+                    ],
+                )
+                self.assertEqual(
+                    [row["line"] for row in parsed["invalid_lines"]], [6, 8]
+                )
+                self.assertTrue(
+                    all(row["reason"] for row in parsed["invalid_lines"])
+                )
+        parsed = services.parse_bulk_email_file(
+            "list.csv", b'\n"email"\n"Person@Example.edu"\n"bad,address"'
         )
-        self.assertEqual(
-            services.parse_bulk_email_file(
-                "list.csv", b'email\n"person@example.edu"\n'
-            ),
-            ["person@example.edu"],
-        )
-        self.assertEqual(
-            services.parse_bulk_email_file(
-                "list.txt", b"\n\nname@example.edu\n\n"
-            ),
-            ["name@example.edu"],
-        )
+        self.assertEqual(parsed["addresses"][0]["email"], "person@example.edu")
+        self.assertEqual(parsed["invalid_lines"][0]["line"], 4)
 
-    def test_invalid_files(self):
+    def test_invalid_addresses_skip_including_all_invalid(self):
+        values = [
+            "Person <person@example.edu>",
+            "a..b@example.edu",
+            "a@-example.edu",
+            "a@example.edu,b@example.edu",
+            "a@example.edu\x00",
+        ]
+        for extension in ("txt", "csv"):
+            output = io.StringIO(newline="")
+            if extension == "csv":
+                csv.writer(output).writerows((value,) for value in values)
+            else:
+                output.write("\n".join(values))
+            data = output.getvalue().encode()
+            parsed = services.parse_bulk_email_file(f"list.{extension}", data)
+            self.assertEqual(parsed["addresses"], [])
+            self.assertEqual(
+                [row["line"] for row in parsed["invalid_lines"]],
+                [1, 2, 3, 4, 5],
+            )
+        parsed = services.parse_bulk_email_file(
+            "list.csv", b'"bad\naddress"\nGood@example.edu'
+        )
+        self.assertEqual(parsed["invalid_lines"][0]["line"], 1)
+        self.assertEqual(parsed["addresses"][0]["line"], 3)
+
+    def test_structural_and_empty_file_errors(self):
         cases = [
             ("list.pdf", b"name@example.edu"),
             ("list.txt", b"\xff"),
             ("list.csv", b"email,name\nperson@example.edu,Person"),
             ("list.csv", b"email,\nperson@example.edu,"),
             ("list.csv", b'"person@example.edu'),
-            ("list.txt", b"name@example.edu\n name@example.edu "),
+            ("list.csv", b'"a@example.edu"unexpected'),
+            ("list.csv", b"good@example.edu\nbad,address"),
             ("list.txt", b"email\n"),
-            ("list.txt", b"email\nemail\na@example.edu"),
+            ("list.csv", b'\n"email"\n'),
             ("list.txt", b""),
-            ("list.txt", b"Person <person@example.edu>"),
-            ("list.txt", b"a..b@example.edu"),
-            ("list.txt", b"a@-example.edu"),
-            ("list.txt", b"a@example.edu,b@example.edu"),
-            ("list.txt", b"a@example.edu\x00"),
+            ("list.txt", b" \r\n\t"),
             ("list.txt", b"x" * (services.BULK_EMAIL_MAX_BYTES + 1)),
-            (
-                "list.txt",
-                "\n".join(f"u{i}@example.edu" for i in range(501)).encode(),
-            ),
         ]
         for filename, data in cases:
-            with self.subTest(filename=filename, data_length=len(data)):
+            with self.subTest(filename=filename, size=len(data)):
                 with self.assertRaises(ValueError):
                     services.parse_bulk_email_file(filename, data)
 
-    def test_address_limit_boundary(self):
+    def test_limits_before_dedup_and_exact_byte_boundary(self):
+        for extension in ("txt", "csv"):
+            for value in (b"a@example.edu\n", b"bad\n"):
+                parsed = services.parse_bulk_email_file(
+                    f"list.{extension}", b"email\n" + value * 500
+                )
+                self.assertEqual(
+                    len(parsed["addresses"]) + bool(parsed["invalid_lines"]), 1
+                )
+                with self.assertRaises(ValueError):
+                    services.parse_bulk_email_file(
+                        f"list.{extension}", value * 501
+                    )
         data = "\n".join(f"u{i}@example.edu" for i in range(500)).encode()
         self.assertEqual(
-            len(services.parse_bulk_email_file("list.txt", data)), 500
+            len(services.parse_bulk_email_file("list.txt", data)["addresses"]),
+            500,
         )
         padded = b"a@example.edu\n".ljust(services.BULK_EMAIL_MAX_BYTES, b" ")
         self.assertEqual(
-            services.parse_bulk_email_file("list.txt", padded),
-            ["a@example.edu"],
+            services.parse_bulk_email_file("list.txt", padded)["addresses"][0][
+                "email"
+            ],
+            "a@example.edu",
         )
 
     def setUp(self):
@@ -215,6 +257,16 @@ class BulkImportTests(unittest.TestCase):
         self.assertEqual(len({r["password"] for r in results[:-1]}), 3)
         self.assertEqual(self.session.admin_checks, 2)
 
+    def test_missing_or_inactive_administrator_never_writes(self):
+        for status in ("pending", "rejected"):
+            self.rows["admin@example.edu"].status = status
+            with self.assertRaises(PermissionError):
+                services.bulk_approve_emails(1, ["new@example.edu"])
+        del self.rows["admin@example.edu"]
+        with self.assertRaises(PermissionError):
+            services.bulk_approve_emails(1, ["new@example.edu"])
+        self.assertEqual(self.session.writes, 0)
+
     def test_unauthorized_and_access_revoked_before_writes(self):
         self.rows["admin@example.edu"].role = "student"
         with self.assertRaises(PermissionError):
@@ -239,16 +291,61 @@ class BulkImportTests(unittest.TestCase):
         self.assertEqual(self.rows["pending@example.edu"].status, "pending")
         self.assertEqual(self.rows["pending@example.edu"].password_hash, "old")
 
-    def test_duplicate_validation_never_opens_transaction(self):
+    def test_case_variants_deduplicate_and_new_accounts_are_lowercase(self):
+        with patch.object(services, "_hash_password", return_value="hash"):
+            results = services.bulk_approve_emails(
+                1, [" New@Example.edu ", "new@example.edu", "NEW@example.edu"]
+            )
+        self.assertEqual([row["email"] for row in results], ["new@example.edu"])
+        self.assertIn("new@example.edu", self.rows)
+        self.assertEqual(len(self.rows), 4)
+
+    def test_case_insensitive_existing_lookup_preserves_identity(self):
+        row = self.rows.pop("pending@example.edu")
+        row.email = "Pending@Example.edu"
+        self.rows[row.email] = row
+        with patch.object(services, "_hash_password", return_value="hash"):
+            results = services.bulk_approve_emails(
+                1, [" PENDING@example.edu ", "pending@example.edu"]
+            )
+        self.assertEqual([row["outcome"] for row in results], ["Reactivated"])
+        self.assertEqual(len(self.rows), 3)
+        self.assertEqual(row.email, "Pending@Example.edu")
+        self.assertEqual(row.role, "faculty")
+
+    def test_ambiguous_legacy_accounts_abort_entire_import_before_writes(self):
+        self.rows["Pending@Example.edu"] = SimpleNamespace(
+            id=4,
+            email="Pending@Example.edu",
+            role="student",
+            status="active",
+            password_hash="old",
+        )
+        before = copy.deepcopy(self.rows)
+        with self.assertRaisesRegex(ValueError, "multiple"):
+            services.bulk_approve_emails(
+                1, ["new@example.edu", "pending@example.edu"]
+            )
+        self.assertEqual(self.session.writes, 0)
+        self.assertEqual(self.rows, before)
+
+    def test_direct_invalid_empty_and_oversized_input_never_opens_transaction(
+        self,
+    ):
         with patch.object(
             services,
             "_transaction",
             side_effect=AssertionError("No transaction expected"),
         ):
-            with self.assertRaises(ValueError):
-                services.bulk_approve_emails(
-                    1, ["duplicate@example.edu", " duplicate@example.edu "]
-                )
+            for addresses in (
+                [],
+                ["bad"],
+                ["a@example.edu", "bad"],
+                ["a@example.edu"] * 501,
+            ):
+                with self.subTest(addresses=addresses[:2]):
+                    with self.assertRaises(ValueError):
+                        services.bulk_approve_emails(1, addresses)
 
     def test_password_collision_is_regenerated(self):
         with (
@@ -268,7 +365,8 @@ class BulkImportTests(unittest.TestCase):
         path = (
             Path(__file__).resolve().parents[1] / "assets" / "sample_emails.txt"
         )
-        addresses = services.parse_bulk_email_file(path.name, path.read_bytes())
+        parsed = services.parse_bulk_email_file(path.name, path.read_bytes())
+        addresses = [row["email"] for row in parsed["addresses"]]
         self.assertEqual(len(addresses), 3)
         self.assertEqual(len(set(addresses)), 3)
 
@@ -402,6 +500,318 @@ class PasswordDownloadTests(unittest.IsolatedAsyncioTestCase):
         download.assert_not_called()
         self.assertFalse(self.state._authorized)
         self.assertEqual(self.state._bulk_results, [])
+
+
+class IdentitySafetyTests(unittest.TestCase):
+    def test_login_case_insensitive_lookup_and_ambiguity(self):
+        for matches in (
+            [],
+            [SimpleNamespace(email="Alice@Example.edu")],
+            [SimpleNamespace(id=1), SimpleNamespace(id=2)],
+        ):
+            session = MagicMock()
+            session.scalars.return_value.all.return_value = matches
+            with patch.object(services, "_transaction") as transaction:
+                transaction.return_value.__enter__.return_value = session
+                if len(matches) > 1:
+                    with self.assertRaisesRegex(ValueError, "multiple"):
+                        services.get_user_by_email(" ALICE@Example.edu ")
+                else:
+                    self.assertIs(
+                        services.get_user_by_email(" ALICE@Example.edu "),
+                        matches[0] if matches else None,
+                    )
+            statement, params = session.scalars.call_args.args
+            self.assertIn("lower(btrim(email)) = :email", str(statement))
+            self.assertEqual(params, {"email": "alice@example.edu"})
+
+    def test_signup_lowercases_and_locks_before_case_insensitive_check(self):
+        session = MagicMock()
+        session.execute.return_value.all.return_value = []
+        with (
+            patch.object(services, "_transaction") as transaction,
+            patch.object(services, "_hash_password", return_value="hash"),
+        ):
+            transaction.return_value.__enter__.return_value = session
+            user = services.create_user(
+                "Alice", " ALICE@Example.edu ", "password", "student"
+            )
+        self.assertEqual(user.email, "alice@example.edu")
+        self.assertIn(
+            "LOCK TABLE", str(session.execute.call_args_list[0].args[0])
+        )
+        self.assertIn(
+            "lower(btrim(email))",
+            str(session.execute.call_args_list[1].args[0]),
+        )
+        self.assertEqual(
+            session.execute.call_args_list[1].args[1],
+            {"email": "alice@example.edu"},
+        )
+
+    def test_signup_refuses_existing_and_ambiguous_matches_without_insert(self):
+        for matches in (
+            [SimpleNamespace(id=1)],
+            [SimpleNamespace(id=1), SimpleNamespace(id=2)],
+        ):
+            session = MagicMock()
+            session.execute.return_value.all.return_value = matches
+            with self.assertRaises(ValueError):
+                services._insert_user(
+                    session,
+                    "Alice",
+                    " ALICE@example.edu ",
+                    "hash",
+                    "student",
+                    "pending",
+                )
+            session.add.assert_not_called()
+            session.flush.assert_not_called()
+
+
+class ImportStateHarness:
+    _clear_import = AdminState._clear_import
+    _clear_access = AdminState._clear_access
+    _verify_import_access = AdminState._verify_import_access
+
+    def __init__(self):
+        self._import_epoch = 0
+        self.revision = 0
+        self._clear_access()
+        self._authorized = True
+        self.login = SimpleNamespace(_session_user_id=1)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return False
+
+    async def get_state(self, state_class):
+        return self.login
+
+
+class ImportStateTests(unittest.IsolatedAsyncioTestCase):
+    async def process(self, data: bytes, filename: str = "s.txt", account=None):
+        state = ImportStateHarness()
+        file = SimpleNamespace(name=filename, read=AsyncMock(return_value=data))
+        account = account or SimpleNamespace(
+            role="system_admin", status="active"
+        )
+        with patch(
+            "UniFlow_.states.admin_state.get_user_by_id", return_value=account
+        ):
+            events = [
+                event
+                async for event in AdminState.import_emails.fn(state, [file])
+            ]
+            if state.importing:
+                events.extend(
+                    [
+                        event
+                        async for event in AdminState.process_email_import.fn(
+                            state, state._import_epoch
+                        )
+                    ]
+                )
+        return state, events
+
+    async def test_all_invalid_retains_line_feedback_without_any_write(self):
+        with (
+            patch("UniFlow_.states.admin_state.bulk_approve_emails") as approve,
+            patch.object(
+                services,
+                "_get_engine",
+                side_effect=AssertionError("Live database forbidden"),
+            ),
+        ):
+            state, _ = await self.process(b"email\nbad\nworse")
+        approve.assert_not_called()
+        self.assertEqual(
+            [row["line"] for row in state._import_invalid_lines], [2, 3]
+        )
+        self.assertIn("No valid email", state.import_message)
+        self.assertTrue(state.import_error)
+        self.assertEqual(state._bulk_results, [])
+        self.assertFalse(state.loading)
+        self.assertFalse(state.importing)
+        state._clear_import()
+        self.assertEqual(state._import_invalid_lines, [])
+        self.assertEqual(state.import_message, "")
+
+    async def test_partial_csv_import_passes_only_deduplicated_valid_addresses(
+        self,
+    ):
+        results = [
+            {
+                "email": "alice@example.edu",
+                "password": "temporary",
+                "outcome": "Created",
+            }
+        ]
+        with (
+            patch(
+                "UniFlow_.states.admin_state.bulk_approve_emails",
+                return_value=results,
+            ) as approve,
+            patch(
+                "UniFlow_.states.admin_state.list_pending_users",
+                return_value=[],
+            ),
+            patch(
+                "UniFlow_.states.admin_state.list_active_users", return_value=[]
+            ),
+        ):
+            state, _ = await self.process(
+                b'email\nAlice@Example.edu\n"bad,address"\nalice@example.edu',
+                "s.csv",
+            )
+        approve.assert_called_once_with(1, ["alice@example.edu"])
+        self.assertEqual(state._bulk_results, results)
+        self.assertEqual(state._import_invalid_lines[0]["line"], 3)
+        self.assertIn("1 invalid lines skipped", state.import_message)
+        self.assertFalse(state.import_error)
+
+    async def test_structural_error_and_denied_role_never_write(self):
+        with (
+            patch("UniFlow_.states.admin_state.bulk_approve_emails") as approve,
+            patch("UniFlow_.states.admin_state.logging.exception"),
+        ):
+            state, _ = await self.process(
+                b"good@example.edu\nbad,address", "s.csv"
+            )
+            self.assertTrue(state.import_error)
+            self.assertEqual(state._bulk_results, [])
+            state, _ = await self.process(
+                b"good@example.edu",
+                account=SimpleNamespace(role="student", status="active"),
+            )
+            self.assertFalse(state._authorized)
+            approve.assert_not_called()
+
+    async def test_epoch_change_discards_late_credentials(self):
+        state = ImportStateHarness()
+        state.importing = state.loading = True
+        state._pending_import = (
+            1,
+            services.parse_bulk_email_file("s.txt", b"a@example.edu"),
+        )
+
+        def save(*args):
+            state._clear_access()
+            return [
+                {
+                    "email": "a@example.edu",
+                    "password": "secret",
+                    "outcome": "Created",
+                }
+            ]
+
+        with (
+            patch(
+                "UniFlow_.states.admin_state.get_user_by_id",
+                return_value=SimpleNamespace(
+                    role="system_admin", status="active"
+                ),
+            ),
+            patch(
+                "UniFlow_.states.admin_state.bulk_approve_emails",
+                side_effect=save,
+            ),
+        ):
+            _ = [
+                event
+                async for event in AdminState.process_email_import.fn(
+                    state, state._import_epoch
+                )
+            ]
+        self.assertEqual(state._bulk_results, [])
+        self.assertFalse(state._authorized)
+
+
+class IdentityDisplayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_signup_submission_display_is_lowercase(self):
+        state = SimpleNamespace(
+            loading=False, submitted=False, message="", submitted_email=""
+        )
+        with patch("UniFlow_.states.signup_state.create_user") as create:
+            _ = [
+                event
+                async for event in SignupState.request_account.fn(
+                    state,
+                    {
+                        "full_name": "Alice",
+                        "email": " ALICE@Example.edu ",
+                        "password": "longpassword",
+                        "confirm_password": "longpassword",
+                        "account_type": "student",
+                    },
+                )
+            ]
+        create.assert_called_once_with(
+            "Alice", "alice@example.edu", "longpassword", "student"
+        )
+        self.assertEqual(state.submitted_email, "alice@example.edu")
+
+    async def test_login_lookup_and_signed_in_display_are_lowercase(self):
+        state = SimpleNamespace(
+            loading=False,
+            signed_in=False,
+            password_revision=0,
+            _clear_dashboard_access=AsyncMock(),
+        )
+        user = SimpleNamespace(
+            id=7,
+            full_name="Alice",
+            email="Alice@Example.edu",
+            role="student",
+            status="active",
+            password_hash="hash",
+            must_change_password=False,
+        )
+        with (
+            patch(
+                "UniFlow_.states.login_state.get_user_by_email",
+                return_value=user,
+            ) as lookup,
+            patch(
+                "UniFlow_.states.login_state.verify_password", return_value=True
+            ),
+        ):
+            _ = [
+                event
+                async for event in LoginState.sign_in.fn(
+                    state,
+                    {"email": " ALICE@Example.edu ", "password": "password"},
+                )
+            ]
+        lookup.assert_called_once_with("alice@example.edu")
+        self.assertEqual(state.email, "alice@example.edu")
+        self.assertTrue(state.signed_in)
+        self.assertEqual(state._session_user_id, 7)
+
+    async def test_ambiguous_login_never_verifies_password_or_signs_in(self):
+        state = SimpleNamespace(
+            loading=False, signed_in=False, password_revision=0
+        )
+        with (
+            patch(
+                "UniFlow_.states.login_state.get_user_by_email",
+                side_effect=ValueError("Ambiguous account"),
+            ),
+            patch("UniFlow_.states.login_state.verify_password") as verify,
+            patch("UniFlow_.states.login_state.logging.exception"),
+        ):
+            _ = [
+                event
+                async for event in LoginState.sign_in.fn(
+                    state,
+                    {"email": "Alice@example.edu", "password": "password"},
+                )
+            ]
+        verify.assert_not_called()
+        self.assertFalse(state.signed_in)
+        self.assertEqual(state._session_user_id, 0)
 
 
 if __name__ == "__main__":

@@ -76,7 +76,7 @@ class LoginState(rx.State):
             return
         self._session_user_id = 0
         self.signed_in = False
-        self.email = str(form_data.get("email", "")).strip()
+        self.email = str(form_data.get("email", "")).strip().lower()
         self.message = ""
         self.full_name = ""
         self.role = ""
@@ -107,12 +107,10 @@ class LoginState(rx.State):
                     await self._clear_dashboard_access()
                     self.full_name = str(user.full_name).strip()
                     self.role = str(user.role)
-                    self.email = str(user.email)
+                    self.email = str(user.email).strip().lower()
                     self._session_user_id = int(user.id)
                     self.signed_in = True
-                    self.must_change_password = bool(
-                        user.must_change_password
-                    )
+                    self.must_change_password = bool(user.must_change_password)
                     if self.must_change_password:
                         yield rx.redirect("/set-password")
                     elif user.role in DASHBOARD_ROUTES:

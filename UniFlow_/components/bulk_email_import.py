@@ -1,7 +1,7 @@
 import reflex as rx
 
 from UniFlow_.states.admin_state import AdminState
-from UniFlow_.user_services import BulkEmailResult
+from UniFlow_.user_services import BulkEmailResult, CourseEmailEntry
 
 
 def import_result_row(result: BulkEmailResult) -> rx.Component:
@@ -40,6 +40,18 @@ def import_result_row(result: BulkEmailResult) -> rx.Component:
     )
 
 
+def skipped_email_row(entry: CourseEmailEntry) -> rx.Component:
+    return rx.el.li(
+        rx.el.p(
+            f"Line {entry['line']}: {entry['email']}",
+            class_name="break-all text-sm font-medium text-[#172B3D]",
+        ),
+        rx.el.p(entry["reason"], class_name="mt-1 text-xs text-[#667078]"),
+        key=entry["line"],
+        class_name="border-b border-[#E9EBE6] py-3 last:border-b-0",
+    )
+
+
 def bulk_email_import() -> rx.Component:
     return rx.el.section(
         rx.el.div(
@@ -62,7 +74,7 @@ def bulk_email_import() -> rx.Component:
                     class_name="mt-3 text-sm font-semibold text-[#246D67]",
                 ),
                 rx.el.p(
-                    "UTF-8 .txt or one-column .csv · up to 1 MB and 500 addresses",
+                    "UTF-8 .txt or one-column .csv · up to 1 MB and 500 nonblank address lines",
                     class_name="mt-2 text-xs text-[#667078]",
                 ),
                 id="admin_bulk_emails",
@@ -71,7 +83,7 @@ def bulk_email_import() -> rx.Component:
                 class_name="mt-5 w-full cursor-pointer rounded-xl border border-dashed border-[#BFCFC9] bg-[#F7F6EF] p-6 text-center transition-colors hover:bg-[#F0F6F3]",
             ),
             rx.el.p(
-                "One email per line, with an optional first row of ‘email’. Matching is case-sensitive; surrounding spaces are trimmed. Invalid rows or duplicates reject the entire file before any changes.",
+                "One email per line, with an optional first nonblank ‘email’ header. Blank lines are ignored. Emails are trimmed, lowercased and deduplicated in order; matching existing accounts is case-insensitive. Invalid addresses are skipped and reported below. The 500-line limit applies before deduplication, including invalid lines. Malformed or multi-column CSV files reject the whole import. Ambiguous existing identities are never changed.",
                 class_name="mt-3 text-xs leading-5 text-[#667078]",
             ),
             rx.el.button(
@@ -134,6 +146,35 @@ def bulk_email_import() -> rx.Component:
             ),
             role="status",
             custom_attrs={"aria-live": "polite"},
+        ),
+        rx.cond(
+            AdminState.authorized
+            & (AdminState.import_invalid_lines.length() > 0),
+            rx.el.section(
+                rx.el.h3(
+                    f"Skipped invalid lines ({AdminState.import_invalid_lines.length()})",
+                    class_name="text-base font-semibold text-[#172B3D]",
+                ),
+                rx.el.p(
+                    "These lines were not imported. Correct their email syntax and upload again.",
+                    class_name="mt-2 text-xs leading-5 text-[#667078]",
+                ),
+                rx.el.ul(
+                    rx.foreach(
+                        AdminState.import_invalid_lines, skipped_email_row
+                    ),
+                    class_name="mt-3 max-h-72 list-none overflow-y-auto p-0",
+                ),
+                rx.el.button(
+                    "Dismiss import results",
+                    type="button",
+                    on_click=AdminState.dismiss_import_results,
+                    disabled=AdminState.importing,
+                    class_name="mt-3 rounded-lg border border-[#D9DEDC] bg-white px-3 py-2 text-xs font-semibold text-[#246D67] hover:bg-[#F0F6F3] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#246D67] disabled:opacity-60",
+                ),
+                class_name="border-t border-[#E9EBE6] bg-white p-5 sm:p-6",
+            ),
+            rx.fragment(),
         ),
         rx.cond(
             AdminState.authorized & (AdminState.bulk_results.length() > 0),

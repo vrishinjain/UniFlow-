@@ -23,7 +23,6 @@ def index() -> rx.Component:
 
 
 app = rx.App(
-    theme=rx.theme(appearance="light"),
     head_components=[
         rx.el.link(rel="preconnect", href="https://fonts.googleapis.com"),
         rx.el.link(
@@ -77,6 +76,16 @@ for pages, on_load in (
                 FacultyState.load_faculty,
                 ReviewState.load_history,
             ]
+        elif route == "/faculty/courses":
+            page_on_load = [
+                FacultyState.load_faculty,
+                FacultyState.load_courses,
+            ]
+        elif route == "/faculty/course/[id]":
+            page_on_load = [
+                FacultyState.load_faculty,
+                FacultyState.load_course_detail,
+            ]             
         app.add_page(
             page, route=route, title=f"{title} · UniFlow", on_load=page_on_load
         )
