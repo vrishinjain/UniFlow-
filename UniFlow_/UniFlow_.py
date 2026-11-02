@@ -5,11 +5,19 @@ from UniFlow_.states.signup_state import SignupState
 from UniFlow_.states.login_state import LoginState
 from UniFlow_.states.admin_state import AdminState
 from UniFlow_.components.admin import ADMIN_PAGES
-from UniFlow_.components.student import STUDENT_PAGES
+from UniFlow_.components.student import (
+    STUDENT_PAGES,
+    student_projects_portal,
+    student_project_detail_portal,
+)
 from UniFlow_.components.faculty import FACULTY_PAGES
 from UniFlow_.components.program_admin import PROGRAM_ADMIN_PAGES
 from UniFlow_.components.sponsor import SPONSOR_PAGES
-from UniFlow_.states.student_state import StudentState
+from UniFlow_.states.student_state import (
+    StudentState,
+    StudentProjectsState,
+    StudentProjectDetailState,
+)
 from UniFlow_.states.faculty_state import FacultyState
 from UniFlow_.states.review_state import ReviewState
 from UniFlow_.states.program_admin_state import ProgramAdminState
@@ -75,7 +83,7 @@ for pages, on_load in (
             page_on_load = [
                 FacultyState.load_faculty,
                 ReviewState.load_history,
-            ]             
+            ]
         app.add_page(
             page, route=route, title=f"{title} · UniFlow", on_load=page_on_load
         )
@@ -85,4 +93,24 @@ app.add_page(
     route="/set-password",
     title="Set your password · UniFlow",
     on_load=SetPasswordState.load_set_password,
+)
+
+app.add_page(
+    student_projects_portal,
+    route="/student/projects",
+    title="My Projects · UniFlow",
+    on_load=[
+        StudentState.load_student,
+        StudentProjectsState.load_student_projects,
+    ],
+)
+
+app.add_page(
+    student_project_detail_portal,
+    route="/student/projects/[project_id]",
+    title="Project · UniFlow",
+    on_load=[
+        StudentState.load_student,
+        StudentProjectDetailState.load_student_project_detail,
+    ],
 )
