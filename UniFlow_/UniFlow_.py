@@ -11,6 +11,7 @@ from UniFlow_.components.program_admin import PROGRAM_ADMIN_PAGES
 from UniFlow_.components.sponsor import SPONSOR_PAGES
 from UniFlow_.states.student_state import StudentState
 from UniFlow_.states.faculty_state import FacultyState
+from UniFlow_.states.review_state import ReviewState
 from UniFlow_.states.program_admin_state import ProgramAdminState
 from UniFlow_.states.sponsor_state import SponsorState
 from UniFlow_.components.set_password import set_password_portal
@@ -70,6 +71,11 @@ for pages, on_load in (
                 SponsorState.load_sponsor,
                 SponsorState.load_my_projects,
             ]
+        elif route == "/faculty/project/[id]":
+            page_on_load = [
+                FacultyState.load_faculty,
+                ReviewState.load_history,
+            ]
         elif route == "/faculty/courses":
             page_on_load = [
                 FacultyState.load_faculty,
@@ -79,7 +85,7 @@ for pages, on_load in (
             page_on_load = [
                 FacultyState.load_faculty,
                 FacultyState.load_course_detail,
-            ]
+            ]             
         app.add_page(
             page, route=route, title=f"{title} · UniFlow", on_load=page_on_load
         )

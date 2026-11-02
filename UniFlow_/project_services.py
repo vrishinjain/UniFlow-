@@ -175,7 +175,10 @@ def get_faculty_projects() -> list[dict]:
                 FROM public.projects AS p
                 JOIN public.users AS u
                     ON p.sponsor_id = u.id
-                ORDER BY p.created_at DESC, p.id DESC
+                ORDER BY
+                    (p.status = 'pending') DESC,
+                    p.created_at DESC,
+                    p.id DESC
             """)
         ).mappings().all()
 

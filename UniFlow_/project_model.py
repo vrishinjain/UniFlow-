@@ -17,7 +17,7 @@ class Project(Base):
     __tablename__ = "projects"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'accepted', 'rejected')",
+            "status IN ('pending','revision_requested', 'accepted', 'rejected')",
             name="projects_status_check",
         ),
         {"schema": "public"},

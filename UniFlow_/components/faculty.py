@@ -8,6 +8,7 @@ from UniFlow_.components.dashboard_layout import (
     page_header,
 )
 from UniFlow_.states.faculty_state import FacultyState
+from UniFlow_.components.review_panel import review_panel
 from UniFlow_.courses_services import CourseRow
 from UniFlow_.components.course_detail import course_detail_content
 
@@ -225,6 +226,8 @@ def _project_details_content() -> rx.Component:
                     ),
                     rx.divider(),
                     _attachments_content(),
+                    rx.divider(),
+                    review_panel(),
                     spacing="4",
                     align="start",
                     width="100%",
