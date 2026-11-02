@@ -14,6 +14,7 @@ from UniFlow_.states.faculty_state import FacultyState
 from UniFlow_.states.review_state import ReviewState
 from UniFlow_.states.program_admin_state import ProgramAdminState
 from UniFlow_.states.sponsor_state import SponsorState
+from UniFlow_.states.sponsor_project_state import SponsorProjectState
 from UniFlow_.components.set_password import set_password_portal
 from UniFlow_.states.set_password_state import SetPasswordState
 
@@ -70,6 +71,11 @@ for pages, on_load in (
             page_on_load = [
                 SponsorState.load_sponsor,
                 SponsorState.load_my_projects,
+            ]
+        elif route == "/sponsor/project/[id]":
+            page_on_load = [
+                SponsorState.load_sponsor,
+                SponsorProjectState.load_project,
             ]
         elif route == "/faculty/project/[id]":
             page_on_load = [

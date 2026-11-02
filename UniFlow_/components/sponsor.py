@@ -8,6 +8,10 @@ from UniFlow_.components.dashboard_layout import (
 )
 from UniFlow_.project_services import SponsorProject
 from UniFlow_.states.sponsor_state import SponsorState
+from UniFlow_.components.sponsor_project import (
+    sponsor_project_content,
+    status_badge,
+)
 from UniFlow_.utils.files import MAX_FILE_BYTES
 
 # Sidebar options for this role. The first item is the dashboard home.
@@ -275,15 +279,16 @@ def sponsor_submit() -> rx.Component:
 def _project_row(project: SponsorProject) -> rx.Component:
     return rx.el.tr(
         rx.el.th(
-            project["title"],
+            rx.el.a(
+                project["title"],
+                href="/sponsor/project/" + project["id"].to(str),
+                class_name="text-[#246D67] underline-offset-2 hover:underline",
+            ),
             scope="row",
             class_name="px-5 py-4 text-left text-sm font-medium text-[#172B3D] break-words",
         ),
         rx.el.td(
-            rx.el.span(
-                project["status"],
-                class_name="inline-block w-fit rounded-full bg-[#EAF3EF] px-3 py-1 text-xs font-semibold text-[#246D67]",
-            ),
+            status_badge(project["status_key"], project["status"]),
             class_name="px-5 py-4",
         ),
         rx.el.td(
@@ -431,10 +436,15 @@ def sponsor_projects() -> rx.Component:
     )
 
 
+def sponsor_project_details() -> rx.Component:
+    return _page("/sponsor/projects", sponsor_project_content())
+
+
 # (page function, route, browser tab title). UniFlow_.py registers each one
 # with SponsorState's on_load check, so every page is protected the same way.
 SPONSOR_PAGES = [
     (sponsor_home, "/sponsor", "Sponsor Dashboard"),
     (sponsor_submit, "/sponsor/submit", "Submit project"),
     (sponsor_projects, "/sponsor/projects", "My projects"),
+    (sponsor_project_details, "/sponsor/project/[id]", "Project details"),
 ]
