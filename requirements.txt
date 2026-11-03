@@ -42,3 +42,4 @@ bcrypt
 psycopg[binary]>=3.1.8
 PyGithub
 geoalchemy2>=0.18
+pytest>=8.0,<10.0
