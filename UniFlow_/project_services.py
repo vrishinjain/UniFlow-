@@ -5,6 +5,7 @@ from typing import TypedDict
 
 from sqlalchemy import text
 
+from UniFlow_.review_services import STATUS_LABELS
 from UniFlow_.user_services import (
     _get_engine,
     _required_text,
@@ -24,7 +25,8 @@ from UniFlow_.utils.files import (
 class SponsorProject(TypedDict):
     id: int
     title: str
-    status: str
+    status: str  # display label, e.g. "Changes requested"
+    status_key: str  # raw value, e.g. "revision_requested"
     submitted_date: str
     submitted_at: str
 
@@ -48,12 +50,8 @@ def list_sponsor_projects(sponsor_id: int) -> list[SponsorProject]:
             SponsorProject(
                 id=int(row.id),
                 title=str(row.title),
-                status=str(row.status)
-                .replace("_", " ")
-                .replace("-", " ")
-                .strip()
-                .title()
-                or "Unknown",
+                status=STATUS_LABELS.get(str(row.status), "Unknown"),
+                status_key=str(row.status),
                 submitted_date=row.created_at.strftime("%b %d, %Y"),
                 submitted_at=row.created_at.isoformat(),
             )

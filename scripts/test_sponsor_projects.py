@@ -37,7 +37,8 @@ class SponsorProjectsTests(unittest.TestCase):
                 {
                     "id": 5,
                     "title": "Project",
-                    "status": "Pending",
+                    "status": "Pending review",
+                    "status_key": "pending",
                     "submitted_date": "Oct 20, 2026",
                     "submitted_at": created_at.isoformat(),
                 }
