@@ -1,4 +1,3 @@
-
 import reflex as rx
 
 import logging
@@ -79,9 +78,7 @@ def submit_project(
     description = _required_text(description, "Description")
 
     if len(files) > MAX_FILES:
-        raise ValueError(
-            "Choose at most 3 attachments. Nothing was saved."
-        )
+        raise ValueError("Choose at most 3 attachments. Nothing was saved.")
 
     for file in files:
         filename = _safe_filename(file["filename"])
@@ -151,10 +148,7 @@ def submit_project(
                     "VALUES (:project_id, :filename, :content_type, "
                     ":size_bytes, :data)"
                 ),
-                [
-                    {"project_id": project_id, **file}
-                    for file in files
-                ],
+                [{"project_id": project_id, **file} for file in files],
             )
 
     return project_id
@@ -164,8 +158,9 @@ def get_faculty_projects() -> list[dict]:
     """Get projects for the faculty dashboard."""
 
     with _transaction() as session:
-        rows = session.execute(
-            text("""
+        rows = (
+            session.execute(
+                text("""
                 SELECT
                     p.id,
                     p.title,
@@ -180,7 +175,10 @@ def get_faculty_projects() -> list[dict]:
                     p.created_at DESC,
                     p.id DESC
             """)
-        ).mappings().all()
+            )
+            .mappings()
+            .all()
+        )
 
         return [
             {
@@ -198,6 +196,7 @@ def get_faculty_projects() -> list[dict]:
 # T-8: Faculty Project Details and Attachment List
 # --------------------------------------------------
 
+
 def get_faculty_project_details(project_id: int) -> dict | None:
     """Get project information and attachment metadata.
 
@@ -209,8 +208,9 @@ def get_faculty_project_details(project_id: int) -> dict | None:
         return None
 
     with _transaction() as session:
-        project = session.execute(
-            text("""
+        project = (
+            session.execute(
+                text("""
                 SELECT
                     p.id,
                     p.title,
@@ -223,14 +223,18 @@ def get_faculty_project_details(project_id: int) -> dict | None:
                     ON p.sponsor_id = u.id
                 WHERE p.id = :project_id
             """),
-            {"project_id": project_id},
-        ).mappings().first()
+                {"project_id": project_id},
+            )
+            .mappings()
+            .first()
+        )
 
         if project is None:
             return None
 
-        attachments = session.execute(
-            text("""
+        attachments = (
+            session.execute(
+                text("""
                 SELECT
                     id,
                     filename,
@@ -239,8 +243,11 @@ def get_faculty_project_details(project_id: int) -> dict | None:
                 WHERE project_id = :project_id
                 ORDER BY id
             """),
-            {"project_id": project_id},
-        ).mappings().all()
+                {"project_id": project_id},
+            )
+            .mappings()
+            .all()
+        )
 
         return {
             "id": str(project["id"]),
@@ -264,6 +271,7 @@ def get_faculty_project_details(project_id: int) -> dict | None:
 # T-8: Faculty Attachment Download
 # --------------------------------------------------
 
+
 def get_faculty_project_file(
     file_id: int,
     project_id: int,
@@ -277,8 +285,9 @@ def get_faculty_project_file(
         return None
 
     with _transaction() as session:
-        attachment = session.execute(
-            text("""
+        attachment = (
+            session.execute(
+                text("""
                 SELECT
                     filename,
                     content_type,
@@ -287,11 +296,14 @@ def get_faculty_project_file(
                 WHERE id = :file_id
                   AND project_id = :project_id
             """),
-            {
-                "file_id": file_id,
-                "project_id": project_id,
-            },
-        ).mappings().first()
+                {
+                    "file_id": file_id,
+                    "project_id": project_id,
+                },
+            )
+            .mappings()
+            .first()
+        )
 
         if attachment is None:
             return None
@@ -301,3 +313,176 @@ def get_faculty_project_file(
             "content_type": str(attachment["content_type"]),
             "data": bytes(attachment["data"]),
         }
+
+
+class SharedStudentProject(TypedDict):
+    id: str
+    title: str
+    description: str
+
+
+class StudentProjectFile(TypedDict):
+    id: str
+    filename: str
+    uploaded_at: str
+
+
+class StudentProjectDetail(SharedStudentProject):
+    files: list[StudentProjectFile]
+
+
+class StudentProjectDownload(TypedDict):
+    filename: str
+    data: bytes
+
+
+_STUDENT_PROJECT_VISIBILITY = """
+    p.status = 'accepted'
+    AND EXISTS (
+        SELECT 1 FROM public.users AS u
+        WHERE u.id = :student_id
+          AND u.role = 'student'
+          AND u.status = 'active'
+          AND u.must_change_password = FALSE
+    )
+    AND EXISTS (
+        SELECT 1 FROM public.project_course_visibility AS v
+        JOIN public.course_enrollments AS e ON e.course_id = v.course_id
+        WHERE v.project_id = p.id AND e.student_id = :student_id
+    )
+"""
+
+
+def list_shared_projects_for_student(
+    student_id: int,
+) -> list[SharedStudentProject]:
+    """Read unique accepted projects visible through current course enrollment."""
+    _validate_user_id(student_id)
+    try:
+        with _get_engine().connect() as connection:
+            student = connection.execute(
+                text(
+                    "SELECT id FROM public.users WHERE id = :student_id "
+                    "AND role = 'student' AND status = 'active' "
+                    "AND must_change_password = FALSE"
+                ),
+                {"student_id": student_id},
+            ).first()
+            if student is None:
+                raise PermissionError(
+                    "Only active students can view shared projects."
+                )
+            rows = (
+                connection.execute(
+                    text(f"""
+                    SELECT p.id, p.title, p.description
+                    FROM public.projects AS p
+                    WHERE {_STUDENT_PROJECT_VISIBILITY}
+                    ORDER BY p.created_at DESC, p.id DESC
+                """),
+                    {"student_id": student_id},
+                )
+                .mappings()
+                .all()
+            )
+        return [
+            SharedStudentProject(
+                id=str(row["id"]),
+                title=str(row["title"]),
+                description=str(row["description"] or ""),
+            )
+            for row in rows
+        ]
+    except Exception as e:
+        logging.exception(f"Error: {e}")
+        raise
+
+
+def get_shared_project_for_student(
+    student_id: int, project_id: int
+) -> StudentProjectDetail | None:
+    """Read one currently visible project and metadata, never attachment bytes."""
+    from UniFlow_.review_services import _validate_project_id
+
+    _validate_user_id(student_id)
+    _validate_project_id(project_id)
+    try:
+        with _get_engine().connect() as connection:
+            rows = (
+                connection.execute(
+                    text(f"""
+                    SELECT p.id, p.title, p.description,
+                           f.id AS file_id, f.filename, f.uploaded_at
+                    FROM public.projects AS p
+                    LEFT JOIN public.project_files AS f ON f.project_id = p.id
+                    WHERE p.id = :project_id AND {_STUDENT_PROJECT_VISIBILITY}
+                    ORDER BY f.uploaded_at, f.id
+                """),
+                    {"student_id": student_id, "project_id": project_id},
+                )
+                .mappings()
+                .all()
+            )
+        if not rows:
+            return None
+        project = rows[0]
+        return StudentProjectDetail(
+            id=str(project["id"]),
+            title=str(project["title"]),
+            description=str(project["description"] or ""),
+            files=[
+                StudentProjectFile(
+                    id=str(row["file_id"]),
+                    filename=str(row["filename"]),
+                    uploaded_at=(
+                        row["uploaded_at"].strftime("%b %d, %Y %I:%M %p %Z")
+                        if row["uploaded_at"] is not None
+                        else "Upload date unavailable"
+                    ),
+                )
+                for row in rows
+                if row["file_id"] is not None
+            ],
+        )
+    except Exception as e:
+        logging.exception(f"Error: {e}")
+        raise
+
+
+def get_shared_project_file_for_student(
+    student_id: int, project_id: int, file_id: int
+) -> StudentProjectDownload | None:
+    """Recheck current account, enrollment and acceptance before reading bytes."""
+    from UniFlow_.review_services import _validate_project_id
+
+    _validate_user_id(student_id)
+    _validate_project_id(project_id)
+    _validate_project_id(file_id)
+    try:
+        with _get_engine().connect() as connection:
+            attachment = (
+                connection.execute(
+                    text(f"""
+                    SELECT f.filename, f.data
+                    FROM public.project_files AS f
+                    JOIN public.projects AS p ON p.id = f.project_id
+                    WHERE f.id = :file_id AND f.project_id = :project_id
+                      AND {_STUDENT_PROJECT_VISIBILITY}
+                """),
+                    {
+                        "student_id": student_id,
+                        "project_id": project_id,
+                        "file_id": file_id,
+                    },
+                )
+                .mappings()
+                .first()
+            )
+        if attachment is None:
+            return None
+        return StudentProjectDownload(
+            filename=str(attachment["filename"]), data=bytes(attachment["data"])
+        )
+    except Exception as e:
+        logging.exception(f"Error: {e}")
+        raise
