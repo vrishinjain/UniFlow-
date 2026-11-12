@@ -1,6 +1,6 @@
 """Fixed role reassignment for IDs 18, 19, 20, and 32.
 
-Mapping: 18 and 19 to faculty; 20 and 32 to system_admin. Only roles change;
+Mapping: 18, 19, 20, and 32 to faculty. Only roles change;
 account statuses remain untouched. Signed-in users may need to sign out and in.
 Run intentionally later with: python scripts/reassign_program_admin_roles.py
 """
@@ -22,8 +22,8 @@ import logging
 ROLE_ASSIGNMENTS: dict[int, str] = {
     18: "faculty",
     19: "faculty",
-    20: "system_admin",
-    32: "system_admin",
+    20: "faculty",
+    32: "faculty",
 }
 
 
