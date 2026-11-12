@@ -38,9 +38,7 @@ __all__ = [
     "bulk_approve_emails",
 ]
 
-_ALLOWED_ROLES = frozenset(
-    {"system_admin", "program_admin", "faculty", "student", "sponsor"}
-)
+_ALLOWED_ROLES = frozenset({"system_admin", "faculty", "student", "sponsor"})
 _ADMIN_SEED_LOCK = 6143972381094261
 
 
@@ -143,7 +141,7 @@ def create_user(full_name: str, email: str, password: str, role: str) -> User:
     """
     if not isinstance(role, str) or role not in _ALLOWED_ROLES:
         raise ValueError(
-            "Invalid role. Expected system_admin, program_admin, faculty, student, or sponsor."
+            "Invalid role. Expected system_admin, faculty, student, or sponsor."
         )
     name = _required_text(full_name, "Full name")
     address = _required_text(email, "Email").lower()
