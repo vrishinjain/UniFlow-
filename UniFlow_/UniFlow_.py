@@ -11,7 +11,6 @@ from UniFlow_.components.student import (
     student_project_detail_portal,
 )
 from UniFlow_.components.faculty import FACULTY_PAGES
-from UniFlow_.components.program_admin import PROGRAM_ADMIN_PAGES
 from UniFlow_.components.sponsor import SPONSOR_PAGES
 from UniFlow_.states.student_state import (
     StudentState,
@@ -20,7 +19,6 @@ from UniFlow_.states.student_state import (
 )
 from UniFlow_.states.faculty_state import FacultyState
 from UniFlow_.states.review_state import ReviewState
-from UniFlow_.states.program_admin_state import ProgramAdminState
 from UniFlow_.states.sponsor_state import SponsorState
 from UniFlow_.states.sponsor_project_state import SponsorProjectState
 from UniFlow_.components.set_password import set_password_portal
@@ -70,7 +68,6 @@ for pages, on_load in (
     (ADMIN_PAGES, AdminState.load_admin),
     (STUDENT_PAGES, StudentState.load_student),
     (FACULTY_PAGES, FacultyState.load_faculty),
-    (PROGRAM_ADMIN_PAGES, ProgramAdminState.load_program_admin),
     (SPONSOR_PAGES, SponsorState.load_sponsor),
 ):
     for page, route, title in pages:

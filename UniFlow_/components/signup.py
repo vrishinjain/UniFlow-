@@ -38,20 +38,32 @@ def signup_form() -> rx.Component:
             class_name="mt-2 mb-7 text-sm leading-6 text-[#667078]",
         ),
         rx.el.form(
-            field("Full name", "signup-name", "full_name", type="text", auto_complete="name"),
             field(
-                "Email address", "signup-email", "email",
-                type="email", auto_complete="email",
+                "Full name",
+                "signup-name",
+                "full_name",
+                type="text",
+                auto_complete="name",
+            ),
+            field(
+                "Email address",
+                "signup-email",
+                "email",
+                type="email",
+                auto_complete="email",
                 custom_attrs={"autocapitalize": "none", "spellcheck": "false"},
             ),
             rx.el.div(
-                rx.el.label("Account type", html_for="signup-type", class_name=LABEL_CLASS),
+                rx.el.label(
+                    "Account type",
+                    html_for="signup-type",
+                    class_name=LABEL_CLASS,
+                ),
                 rx.el.select(
                     rx.el.option("Choose one", value="", disabled=True),
                     rx.el.option("Student", value="student"),
                     rx.el.option("Faculty", value="faculty"),
                     rx.el.option("Sponsor", value="sponsor"),
-                    rx.el.option("Program Admin", value="program_admin"),
                     id="signup-type",
                     name="account_type",
                     default_value="",
@@ -62,13 +74,19 @@ def signup_form() -> rx.Component:
                 class_name="mb-5",
             ),
             field(
-                "Password", "signup-password", "password",
-                type="password", auto_complete="new-password",
+                "Password",
+                "signup-password",
+                "password",
+                type="password",
+                auto_complete="new-password",
                 placeholder="At least 8 characters",
             ),
             field(
-                "Confirm password", "signup-confirm", "confirm_password",
-                type="password", auto_complete="new-password",
+                "Confirm password",
+                "signup-confirm",
+                "confirm_password",
+                type="password",
+                auto_complete="new-password",
             ),
             rx.el.div(
                 rx.cond(
@@ -84,7 +102,9 @@ def signup_form() -> rx.Component:
                 class_name="mb-4",
             ),
             rx.el.button(
-                rx.cond(SignupState.loading, "Sending request...", "Send request"),
+                rx.cond(
+                    SignupState.loading, "Sending request...", "Send request"
+                ),
                 type="submit",
                 disabled=SignupState.loading,
                 class_name=(
@@ -113,7 +133,10 @@ def request_sent_card() -> rx.Component:
         ),
         rx.el.p(
             "We've sent your request for ",
-            rx.el.span(SignupState.submitted_email, class_name="font-medium break-words text-[#172B3D]"),
+            rx.el.span(
+                SignupState.submitted_email,
+                class_name="font-medium break-words text-[#172B3D]",
+            ),
             " to an administrator. Try signing in after it's approved.",
             class_name="mt-3 text-sm leading-6 text-[#667078]",
         ),
@@ -138,7 +161,9 @@ def signup_portal() -> rx.Component:
                 class_name="mb-9 text-center text-2xl font-semibold tracking-tight text-[#172B3D]",
             ),
             rx.el.div(
-                rx.cond(SignupState.submitted, request_sent_card(), signup_form()),
+                rx.cond(
+                    SignupState.submitted, request_sent_card(), signup_form()
+                ),
                 class_name="w-full rounded-2xl border border-[#E2E4DC] bg-white p-7 sm:p-9",
             ),
             class_name="w-full max-w-[440px]",
