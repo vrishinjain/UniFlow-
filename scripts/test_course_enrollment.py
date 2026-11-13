@@ -426,6 +426,147 @@ class CourseAuthorizationTests(unittest.TestCase):
         self.assertEqual(summary["added"], [])
         self.assertEqual(session.execute.call_count, 2)
 
+    def test_bulk_reupload_reports_existing_enrollment_as_already_enrolled(
+        self,
+    ):
+        enrollment_tuples: set[tuple[int, int]] = set()
+        returned_insert_rows: list[list[int]] = []
+        insert_statements: list[str] = []
+        session = MagicMock()
+
+        def execute(sql, parameters):
+            statement = str(sql)
+            if "SELECT role, status FROM public.users" in statement:
+                return MagicMock(
+                    first=lambda: SimpleNamespace(
+                        role="faculty", status="active"
+                    )
+                )
+            if (
+                "FROM public.courses c" in statement
+                and "FOR UPDATE OF c" in statement
+            ):
+                return MagicMock(
+                    first=lambda: SimpleNamespace(
+                        name="Course", code="CS", term="Fall"
+                    )
+                )
+            if "lower(btrim(u.email)) = ANY(:emails)" in statement:
+                return MagicMock(
+                    all=lambda: [
+                        SimpleNamespace(
+                            id=21,
+                            email="student@example.edu",
+                            role="student",
+                            status="active",
+                        )
+                    ]
+                )
+            if "INSERT INTO public.course_enrollments" in statement:
+                insert_statements.append(statement)
+                self.assertIn(
+                    "ON CONFLICT (course_id, student_id) DO NOTHING", statement
+                )
+                self.assertIn("RETURNING student_id", statement)
+                inserted_rows = []
+                for student_id in parameters["student_ids"]:
+                    enrollment = (parameters["course_id"], student_id)
+                    if enrollment not in enrollment_tuples:
+                        enrollment_tuples.add(enrollment)
+                        inserted_rows.append(
+                            SimpleNamespace(student_id=student_id)
+                        )
+                returned_insert_rows.append(
+                    [row.student_id for row in inserted_rows]
+                )
+                return MagicMock(all=lambda: inserted_rows)
+            self.fail(f"Unexpected SQL in mocked enrollment test: {statement}")
+
+        session.execute.side_effect = execute
+        data = b"student@example.edu\n"
+        with patch.object(courses, "_transaction") as transaction:
+            transaction.return_value.__enter__.return_value = session
+            first = courses.bulk_enroll_course_students(
+                12, 7, "students.txt", data
+            )
+            second = courses.bulk_enroll_course_students(
+                12, 7, "students.txt", data
+            )
+
+        self.assertEqual(
+            first["added"],
+            [{"email": "student@example.edu", "line": 1, "reason": ""}],
+        )
+        self.assertEqual(first["already_enrolled"], [])
+        self.assertEqual(
+            second["already_enrolled"],
+            [{"email": "student@example.edu", "line": 1, "reason": ""}],
+        )
+        self.assertEqual(second["added"], [])
+        self.assertEqual(enrollment_tuples, {(7, 21)})
+        self.assertEqual(returned_insert_rows, [[21], []])
+        self.assertEqual(len(insert_statements), 2)
+        self.assertTrue(
+            all(
+                "ON CONFLICT (course_id, student_id) DO NOTHING" in sql
+                for sql in insert_statements
+            )
+        )
+        self.assertEqual(session.execute.call_count, 8)
+        self.assertEqual(transaction.call_count, 2)
+
+    def test_bulk_enrollment_rejects_course_owned_by_another_faculty(self):
+        session = MagicMock()
+
+        def execute(sql, parameters):
+            statement = str(sql)
+            if "SELECT role, status FROM public.users" in statement:
+                return MagicMock(
+                    first=lambda: SimpleNamespace(
+                        role="faculty", status="active"
+                    )
+                )
+            if (
+                "FROM public.courses c" in statement
+                and "FOR UPDATE OF c" in statement
+            ):
+                self.assertIn(
+                    "c.faculty_id = :authenticated_faculty_id", statement
+                )
+                self.assertIn("c.id = :course_id", statement)
+                self.assertEqual(parameters["authenticated_faculty_id"], 12)
+                self.assertEqual(parameters["course_id"], 7)
+                return MagicMock(first=lambda: None)
+            self.fail(
+                f"Unexpected SQL after denied course ownership: {statement}"
+            )
+
+        session.execute.side_effect = execute
+        with patch.object(courses, "_transaction") as transaction:
+            transaction.return_value.__enter__.return_value = session
+            with self.assertRaisesRegex(ValueError, "Course not found"):
+                courses.bulk_enroll_course_students(
+                    12, 7, "students.txt", b"student@example.edu\n"
+                )
+
+        self.assertEqual(session.execute.call_count, 2)
+        executed_sql = [
+            str(call.args[0]) for call in session.execute.call_args_list
+        ]
+        self.assertFalse(
+            any(
+                "INSERT INTO public.course_enrollments" in sql
+                for sql in executed_sql
+            )
+        )
+        self.assertFalse(
+            any(
+                "lower(btrim(u.email)) = ANY(:emails)" in sql
+                for sql in executed_sql
+            )
+        )
+        transaction.assert_called_once()
+
     def test_direct_invalid_addresses_fail_before_transaction(self):
         with patch.object(courses, "_transaction") as transaction:
             for entries in (
