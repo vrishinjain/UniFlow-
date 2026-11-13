@@ -26,7 +26,7 @@ class User(Base):
     __table_args__ = (
         UniqueConstraint("email", name="users_email_key"),
         CheckConstraint(
-            "role IN ('system_admin', 'program_admin', 'faculty', 'student', 'sponsor')",
+            "role IN ('system_admin', 'faculty', 'student', 'sponsor')",
             name="users_role_check",
         ),
         CheckConstraint(

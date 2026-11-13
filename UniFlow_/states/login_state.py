@@ -11,7 +11,6 @@ import logging
 DASHBOARD_ROUTES = {
     "student": "/student",
     "faculty": "/faculty",
-    "program_admin": "/programadmin",
     "sponsor": "/sponsor",
     "system_admin": "/admin",
 }
@@ -42,14 +41,12 @@ class LoginState(rx.State):
         from UniFlow_.states.admin_state import AdminState
         from UniFlow_.states.student_state import StudentState
         from UniFlow_.states.faculty_state import FacultyState
-        from UniFlow_.states.program_admin_state import ProgramAdminState
         from UniFlow_.states.sponsor_state import SponsorState
 
         for state_class in (
             AdminState,
             StudentState,
             FacultyState,
-            ProgramAdminState,
             SponsorState,
         ):
             dashboard = await self.get_state(state_class)
@@ -58,9 +55,9 @@ class LoginState(rx.State):
     @rx.event
     def redirect_signed_in_user(self):
         if self.signed_in:
-            if self._session_user_id > 0 and self.must_change_password:
-                return rx.redirect("/set-password")
             if self._session_user_id > 0 and self.role in DASHBOARD_ROUTES:
+                if self.must_change_password:
+                    return rx.redirect("/set-password")
                 return rx.redirect(DASHBOARD_ROUTES[self.role])
             self._clear_session()
 
@@ -104,17 +101,21 @@ class LoginState(rx.State):
                 case "rejected":
                     self.message = "Your request was not approved"
                 case "active":
+                    role = str(user.role)
+                    if role not in DASHBOARD_ROUTES:
+                        self.message = "This account role is not supported. Contact an administrator."
+                        return
                     await self._clear_dashboard_access()
                     self.full_name = str(user.full_name).strip()
-                    self.role = str(user.role)
+                    self.role = role
                     self.email = str(user.email).strip().lower()
                     self._session_user_id = int(user.id)
                     self.signed_in = True
                     self.must_change_password = bool(user.must_change_password)
                     if self.must_change_password:
                         yield rx.redirect("/set-password")
-                    elif user.role in DASHBOARD_ROUTES:
-                        yield rx.redirect(DASHBOARD_ROUTES[user.role])
+                    else:
+                        yield rx.redirect(DASHBOARD_ROUTES[role])
                 case _:
                     self.message = "Invalid email or password"
         except Exception as exc:

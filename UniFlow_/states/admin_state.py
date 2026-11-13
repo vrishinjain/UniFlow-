@@ -5,7 +5,7 @@ import csv
 import io
 from typing import TypedDict
 
-from UniFlow_.states.login_state import LoginState
+from UniFlow_.states.login_state import DASHBOARD_ROUTES, LoginState
 from UniFlow_.user_services import (
     activate_user,
     BULK_EMAIL_MAX_BYTES,
@@ -167,7 +167,6 @@ class AdminState(rx.State):
             users = await asyncio.to_thread(list_active_users)
             role_labels = {
                 "system_admin": "System admin",
-                "program_admin": "Program admin",
                 "faculty": "Faculty",
                 "student": "Student",
                 "sponsor": "Sponsor",
@@ -218,6 +217,10 @@ class AdminState(rx.State):
     async def _change(
         self, user_id: int, operation: str, role: str = ""
     ) -> bool:
+        if operation == "role" and role not in DASHBOARD_ROUTES:
+            self.error = True
+            self.message = "Choose a valid account role."
+            return False
         if not await self._authorize():
             return False
         try:
@@ -244,6 +247,11 @@ class AdminState(rx.State):
     @rx.event
     async def change_role(self, user_id: int, role: str):
         if self.loading:
+            return
+        if role not in DASHBOARD_ROUTES:
+            self.error = True
+            self.message = "Choose a valid account role."
+            self.loading = False
             return
         self.loading = True
         self.error = False
@@ -421,7 +429,6 @@ class AdminState(rx.State):
                     ]
                     labels = {
                         "system_admin": "System admin",
-                        "program_admin": "Program admin",
                         "faculty": "Faculty",
                         "student": "Student",
                         "sponsor": "Sponsor",
