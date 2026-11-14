@@ -9,7 +9,6 @@ from UniFlow_.user_services import create_user
 # What the user picks in the form -> the role saved in the database.
 # system_admin is never offered here; it is created separately.
 ACCOUNT_TYPES = {
-    "program_admin": "program_admin",
     "faculty": "faculty",
     "student": "student",
     "sponsor": "sponsor",

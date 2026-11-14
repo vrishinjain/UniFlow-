@@ -41,7 +41,6 @@ def request_row(request: PendingRequest) -> rx.Component:
                     rx.el.option("Student", value="student"),
                     rx.el.option("Faculty", value="faculty"),
                     rx.el.option("Sponsor", value="sponsor"),
-                    rx.el.option("Program admin", value="program_admin"),
                     rx.el.option("System admin", value="system_admin"),
                     id=f"request-role-{request['id']}",
                     value=request["role"],
@@ -118,9 +117,24 @@ def approved_user_row(user: ApprovedUser) -> rx.Component:
 
 # Sidebar options for the system admin.
 ADMIN_NAV = [
-    NavItem("Account requests", "inbox", "/admin", "Review and approve new account requests."),
-    NavItem("Bulk import", "upload", "/admin/import", "Create student accounts from a list of emails."),
-    NavItem("Approved users", "user-check", "/admin/users", "See every account with active access."),
+    NavItem(
+        "Account requests",
+        "inbox",
+        "/admin",
+        "Review and approve new account requests.",
+    ),
+    NavItem(
+        "Bulk import",
+        "upload",
+        "/admin/import",
+        "Create student accounts from a list of emails.",
+    ),
+    NavItem(
+        "Approved users",
+        "user-check",
+        "/admin/users",
+        "See every account with active access.",
+    ),
 ]
 
 
@@ -135,169 +149,165 @@ def _page(route: str, content: rx.Component) -> rx.Component:
 
 
 def _pending_requests_section() -> rx.Component:
-    return (
-        rx.el.section(
+    return rx.el.section(
+        rx.el.div(
             rx.el.div(
-                rx.el.div(
-                    rx.el.h2(
-                        "Pending requests",
-                        class_name="text-lg font-semibold text-[#172B3D]",
-                    ),
-                    rx.el.p(
-                        "Role changes are saved immediately. Approvals and rejections are final.",
-                        class_name="mt-1 text-xs leading-5 text-[#667078]",
-                    ),
+                rx.el.h2(
+                    "Pending requests",
+                    class_name="text-lg font-semibold text-[#172B3D]",
                 ),
-                rx.el.button(
-                    rx.el.span("↻", custom_attrs={"aria-hidden": "true"}),
-                    "Refresh",
-                    type="button",
-                    on_click=AdminState.refresh_requests,
-                    disabled=AdminState.loading,
-                    class_name="flex shrink-0 items-center gap-2 rounded-lg border border-[#D9DEDC] bg-white px-3 py-2 text-sm font-medium text-[#246D67] hover:bg-[#F0F6F3] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F] disabled:cursor-wait disabled:text-[#929A9E]",
+                rx.el.p(
+                    "Role changes are saved immediately. Approvals and rejections are final.",
+                    class_name="mt-1 text-xs leading-5 text-[#667078]",
                 ),
-                class_name="flex items-center justify-between gap-4 border-b border-[#E9EBE6] p-5 sm:p-6",
             ),
-            rx.el.div(
-                rx.cond(
-                    AdminState.message != "",
-                    rx.el.p(
-                        AdminState.message,
-                        class_name=rx.cond(
-                            AdminState.error,
-                            "mx-5 my-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 sm:mx-6",
-                            "mx-5 my-4 rounded-lg border border-[#CDE1D7] bg-[#EAF3EF] px-4 py-3 text-sm text-[#246D67] sm:mx-6",
-                        ),
+            rx.el.button(
+                rx.el.span("↻", custom_attrs={"aria-hidden": "true"}),
+                "Refresh",
+                type="button",
+                on_click=AdminState.refresh_requests,
+                disabled=AdminState.loading,
+                class_name="flex shrink-0 items-center gap-2 rounded-lg border border-[#D9DEDC] bg-white px-3 py-2 text-sm font-medium text-[#246D67] hover:bg-[#F0F6F3] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F] disabled:cursor-wait disabled:text-[#929A9E]",
+            ),
+            class_name="flex items-center justify-between gap-4 border-b border-[#E9EBE6] p-5 sm:p-6",
+        ),
+        rx.el.div(
+            rx.cond(
+                AdminState.message != "",
+                rx.el.p(
+                    AdminState.message,
+                    class_name=rx.cond(
+                        AdminState.error,
+                        "mx-5 my-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 sm:mx-6",
+                        "mx-5 my-4 rounded-lg border border-[#CDE1D7] bg-[#EAF3EF] px-4 py-3 text-sm text-[#246D67] sm:mx-6",
                     ),
-                    rx.fragment(),
+                ),
+                rx.fragment(),
+            ),
+            role="status",
+            custom_attrs={"aria-live": "polite", "aria-atomic": "true"},
+        ),
+        rx.cond(
+            AdminState.loading,
+            rx.el.div(
+                rx.el.p(
+                    "Updating requests…",
+                    class_name="text-sm text-[#667078]",
+                ),
+                rx.el.div(
+                    class_name="mt-4 h-20 animate-pulse rounded-lg bg-[#F5F5F1]"
                 ),
                 role="status",
-                custom_attrs={"aria-live": "polite", "aria-atomic": "true"},
+                class_name="p-6",
             ),
             rx.cond(
-                AdminState.loading,
-                rx.el.div(
-                    rx.el.p(
-                        "Updating requests…",
-                        class_name="text-sm text-[#667078]",
-                    ),
-                    rx.el.div(
-                        class_name="mt-4 h-20 animate-pulse rounded-lg bg-[#F5F5F1]"
-                    ),
-                    role="status",
-                    class_name="p-6",
+                AdminState.requests.length() > 0,
+                rx.el.ul(
+                    rx.foreach(AdminState.requests, request_row),
+                    class_name="m-0 w-full list-none p-0",
                 ),
-                rx.cond(
-                    AdminState.requests.length() > 0,
-                    rx.el.ul(
-                        rx.foreach(AdminState.requests, request_row),
-                        class_name="m-0 w-full list-none p-0",
+                rx.el.div(
+                    rx.el.span(
+                        "▤",
+                        custom_attrs={"aria-hidden": "true"},
+                        class_name="mx-auto block text-3xl leading-8 text-[#28766F]",
                     ),
-                    rx.el.div(
-                        rx.el.span(
-                            "▤",
-                            custom_attrs={"aria-hidden": "true"},
-                            class_name="mx-auto block text-3xl leading-8 text-[#28766F]",
+                    rx.el.h3(
+                        rx.cond(
+                            AdminState.error,
+                            "Requests unavailable",
+                            "You're all caught up",
                         ),
-                        rx.el.h3(
-                            rx.cond(
-                                AdminState.error,
-                                "Requests unavailable",
-                                "You're all caught up",
-                            ),
-                            class_name="mt-4 text-base font-semibold text-[#172B3D]",
-                        ),
-                        rx.el.p(
-                            rx.cond(
-                                AdminState.error,
-                                "Use Refresh to try loading the list again.",
-                                "There are no pending account requests to review.",
-                            ),
-                            class_name="mt-2 text-sm text-[#667078]",
-                        ),
-                        class_name="px-6 py-14 text-center",
+                        class_name="mt-4 text-base font-semibold text-[#172B3D]",
                     ),
+                    rx.el.p(
+                        rx.cond(
+                            AdminState.error,
+                            "Use Refresh to try loading the list again.",
+                            "There are no pending account requests to review.",
+                        ),
+                        class_name="mt-2 text-sm text-[#667078]",
+                    ),
+                    class_name="px-6 py-14 text-center",
                 ),
             ),
-            custom_attrs={"aria-busy": AdminState.loading},
-            class_name="w-full overflow-hidden rounded-2xl border border-[#E2E4DC] bg-white",
-    )
+        ),
+        custom_attrs={"aria-busy": AdminState.loading},
+        class_name="w-full overflow-hidden rounded-2xl border border-[#E2E4DC] bg-white",
     )
 
 
 def _approved_users_section() -> rx.Component:
-    return (
-        rx.el.section(
+    return rx.el.section(
+        rx.el.div(
             rx.el.div(
-                rx.el.div(
-                    rx.el.h2(
-                        "Approved users",
-                        class_name="text-lg font-semibold text-[#172B3D]",
-                    ),
-                    rx.el.p(
-                        "Accounts with active access, including system administrators.",
-                        class_name="mt-1 text-xs leading-5 text-[#667078]",
-                    ),
+                rx.el.h2(
+                    "Approved users",
+                    class_name="text-lg font-semibold text-[#172B3D]",
                 ),
-                class_name="border-b border-[#E9EBE6] p-5 sm:p-6",
+                rx.el.p(
+                    "Accounts with active access, including system administrators.",
+                    class_name="mt-1 text-xs leading-5 text-[#667078]",
+                ),
+            ),
+            class_name="border-b border-[#E9EBE6] p-5 sm:p-6",
+        ),
+        rx.cond(
+            AdminState.loading,
+            rx.el.div(
+                rx.el.p(
+                    "Loading approved users…",
+                    class_name="text-sm text-[#667078]",
+                ),
+                rx.el.div(
+                    class_name="mt-4 h-16 animate-pulse rounded-lg bg-[#F5F5F1]"
+                ),
+                role="status",
+                class_name="p-6",
             ),
             rx.cond(
-                AdminState.loading,
+                AdminState.approved_error,
                 rx.el.div(
-                    rx.el.p(
-                        "Loading approved users…",
-                        class_name="text-sm text-[#667078]",
+                    rx.el.h3(
+                        "Approved users unavailable",
+                        class_name="text-base font-semibold text-[#172B3D]",
                     ),
-                    rx.el.div(
-                        class_name="mt-4 h-16 animate-pulse rounded-lg bg-[#F5F5F1]"
+                    rx.el.p(
+                        "Use Refresh to try loading the list again.",
+                        class_name="mt-2 text-sm text-[#667078]",
                     ),
                     role="status",
-                    class_name="p-6",
+                    class_name="px-6 py-10 text-center",
                 ),
                 rx.cond(
-                    AdminState.approved_error,
+                    AdminState.approved_users.length() > 0,
+                    rx.el.ul(
+                        rx.foreach(
+                            AdminState.approved_users, approved_user_row
+                        ),
+                        class_name="m-0 w-full list-none p-0",
+                    ),
                     rx.el.div(
+                        rx.el.span(
+                            "✓",
+                            custom_attrs={"aria-hidden": "true"},
+                            class_name="mx-auto block text-2xl leading-7 text-[#28766F]",
+                        ),
                         rx.el.h3(
-                            "Approved users unavailable",
-                            class_name="text-base font-semibold text-[#172B3D]",
+                            "No approved users yet",
+                            class_name="mt-3 text-base font-semibold text-[#172B3D]",
                         ),
                         rx.el.p(
-                            "Use Refresh to try loading the list again.",
+                            "Active accounts will appear here.",
                             class_name="mt-2 text-sm text-[#667078]",
                         ),
-                        role="status",
                         class_name="px-6 py-10 text-center",
-                    ),
-                    rx.cond(
-                        AdminState.approved_users.length() > 0,
-                        rx.el.ul(
-                            rx.foreach(
-                                AdminState.approved_users, approved_user_row
-                            ),
-                            class_name="m-0 w-full list-none p-0",
-                        ),
-                        rx.el.div(
-                            rx.el.span(
-                                "✓",
-                                custom_attrs={"aria-hidden": "true"},
-                                class_name="mx-auto block text-2xl leading-7 text-[#28766F]",
-                            ),
-                            rx.el.h3(
-                                "No approved users yet",
-                                class_name="mt-3 text-base font-semibold text-[#172B3D]",
-                            ),
-                            rx.el.p(
-                                "Active accounts will appear here.",
-                                class_name="mt-2 text-sm text-[#667078]",
-                            ),
-                            class_name="px-6 py-10 text-center",
-                        ),
                     ),
                 ),
             ),
-            custom_attrs={"aria-busy": AdminState.loading},
-            class_name="w-full overflow-hidden rounded-2xl border border-[#E2E4DC] bg-white",
-    )
+        ),
+        custom_attrs={"aria-busy": AdminState.loading},
+        class_name="w-full overflow-hidden rounded-2xl border border-[#E2E4DC] bg-white",
     )
 
 

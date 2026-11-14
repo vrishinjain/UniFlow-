@@ -1,4 +1,9 @@
 import reflex as rx
+from datetime import timedelta
+from functools import wraps
+
+from reflex_base.vars.base import Var
+from reflex_components_core.core.banner import ConnectionToaster, environment
 from UniFlow_.components.signup import signup_portal
 from UniFlow_.components.login import identity_portal
 from UniFlow_.states.signup_state import SignupState
@@ -11,7 +16,6 @@ from UniFlow_.components.student import (
     student_project_detail_portal,
 )
 from UniFlow_.components.faculty import FACULTY_PAGES
-from UniFlow_.components.program_admin import PROGRAM_ADMIN_PAGES
 from UniFlow_.components.sponsor import SPONSOR_PAGES
 from UniFlow_.states.student_state import (
     StudentState,
@@ -20,11 +24,44 @@ from UniFlow_.states.student_state import (
 )
 from UniFlow_.states.faculty_state import FacultyState
 from UniFlow_.states.review_state import ReviewState
-from UniFlow_.states.program_admin_state import ProgramAdminState
 from UniFlow_.states.sponsor_state import SponsorState
 from UniFlow_.states.sponsor_project_state import SponsorProjectState
 from UniFlow_.components.set_password import set_password_portal
 from UniFlow_.states.set_password_state import SetPasswordState
+
+
+def _patch_connection_toaster_timeout() -> None:
+    add_hooks = ConnectionToaster.add_hooks
+    if getattr(add_hooks, "_uniflow_timeout_patch", False):
+        return
+
+    @wraps(add_hooks)
+    def patched_add_hooks(self, *args, **kwargs):
+        hooks = add_hooks(self, *args, **kwargs)
+        timeout = environment.REFLEX_BACKEND_COLD_START_TIMEOUT.get()
+        if isinstance(timeout, timedelta):
+            malformed = f"}}, {timeout * 1000});"
+            corrected = f"}}, {timeout.total_seconds() * 1000:g});"
+            patched_hooks = []
+            for hook in hooks:
+                if isinstance(hook, Var):
+                    patched_hooks.append(
+                        hook._replace(
+                            _js_expr=str(hook).replace(malformed, corrected)
+                        )
+                    )
+                elif isinstance(hook, str):
+                    patched_hooks.append(hook.replace(malformed, corrected))
+                else:
+                    patched_hooks.append(hook)
+            return patched_hooks
+        return hooks
+
+    patched_add_hooks._uniflow_timeout_patch = True
+    ConnectionToaster.add_hooks = patched_add_hooks
+
+
+_patch_connection_toaster_timeout()
 
 
 def index() -> rx.Component:
@@ -70,7 +107,6 @@ for pages, on_load in (
     (ADMIN_PAGES, AdminState.load_admin),
     (STUDENT_PAGES, StudentState.load_student),
     (FACULTY_PAGES, FacultyState.load_faculty),
-    (PROGRAM_ADMIN_PAGES, ProgramAdminState.load_program_admin),
     (SPONSOR_PAGES, SponsorState.load_sponsor),
 ):
     for page, route, title in pages:
