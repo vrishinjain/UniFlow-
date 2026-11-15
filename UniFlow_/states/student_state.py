@@ -10,6 +10,10 @@ from UniFlow_.project_services import (
     get_shared_project_for_student,
     get_shared_project_file_for_student,
 )
+from UniFlow_.assignment_services import (
+    AssignedProject,
+    get_assignments_for_student,
+)
 from UniFlow_.states.login_state import LoginState
 from UniFlow_.states.role_guard import check_dashboard_access
 
@@ -297,3 +301,85 @@ class StudentProjectDetailState(rx.State):
             yield rx.download(
                 data=attachment["data"], filename=attachment["filename"]
             )
+
+
+class StudentMyProjectState(rx.State):
+    """The project(s) this student has been assigned to, with teammates."""
+
+    assignments: list[AssignedProject] = []
+    authorized: bool = False
+    loading: bool = True
+    error: str = ""
+    _load_request: int = 0
+
+    def _clear_access(self):
+        self.assignments = []
+        self.authorized = False
+        self.loading = False
+        self.error = ""
+        self._load_request += 1
+
+    async def _session_matches(self, student_id: int) -> bool:
+        login = await self.get_state(LoginState)
+        return (
+            login.signed_in
+            and login._session_user_id == student_id
+            and login.role == "student"
+            and not login.must_change_password
+        )
+
+    @rx.event(background=True)
+    async def load_my_project(self):
+        async with self:
+            self._clear_access()
+            self.loading = True
+            request = self._load_request
+            path = self.router.page.path
+        account, redirect_to = await check_dashboard_access(
+            self, "student", background=True
+        )
+        if account is None:
+            async with self:
+                if (
+                    request != self._load_request
+                    or path != self.router.page.path
+                ):
+                    return
+                self._clear_access()
+            yield rx.redirect(redirect_to or "/")
+            return
+        student_id = int(account.id)
+        assignments: list[AssignedProject] = []
+        error = ""
+        denied = False
+        try:
+            assignments = await asyncio.to_thread(
+                get_assignments_for_student, student_id
+            )
+        except (PermissionError, ValueError) as e:
+            logging.exception(f"Error: {e}")
+            denied = True
+        except Exception as e:
+            logging.exception(f"Error: {e}")
+            error = "Your project could not be loaded. Please try again."
+        current, redirect_to = await check_dashboard_access(
+            self, "student", background=True
+        )
+        async with self:
+            if request != self._load_request or path != self.router.page.path:
+                return
+            allowed = (
+                not denied
+                and current is not None
+                and current.id == student_id
+                and await self._session_matches(student_id)
+            )
+            if allowed:
+                self.assignments = assignments
+                self.error = error
+                self.loading = False
+                self.authorized = True
+            else:
+                self._clear_access()
+        if not allowed:
+            yield rx.redirect(redirect_to or "/")
