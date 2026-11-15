@@ -7,9 +7,11 @@ from UniFlow_.components.dashboard_layout import (
     home_content,
     page_header,
 )
+from UniFlow_.assignment_services import AssignedProject, Teammate
 from UniFlow_.project_services import SharedStudentProject, StudentProjectFile
 from UniFlow_.states.student_state import (
     StudentState,
+    StudentMyProjectState,
     StudentProjectsState,
     StudentProjectDetailState,
 )
@@ -19,6 +21,12 @@ STUDENT_NAV = [
     NavItem("Home", "house", "/student", "Overview of your student workspace."),
     NavItem(
         "My project",
+        "folder-kanban",
+        "/student/my-project",
+        "Your assigned project, teammates and workspace.",
+    ),
+    NavItem(
+        "Course projects",
         "folder",
         "/student/projects",
         "See projects shared with your courses.",
@@ -58,7 +66,7 @@ def student_home() -> rx.Component:
 
 def student_browse() -> rx.Component:
     # Later sprint.
-    return _page("/student/browse", coming_soon("Student", STUDENT_NAV[2]))
+    return _page("/student/browse", coming_soon("Student", STUDENT_NAV[3]))
 
 
 def shared_project_card(project: SharedStudentProject) -> rx.Component:
@@ -245,6 +253,129 @@ def student_project_detail_portal() -> rx.Component:
                             type="button",
                             on_click=StudentProjectDetailState.load_student_project_detail,
                             class_name="rounded-lg bg-[#246D67] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1C5752] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F]",
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    )
+
+
+_BUTTON = "flex w-fit items-center gap-2 rounded-lg bg-[#246D67] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1C5752] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F]"
+
+
+def teammate_row(mate: Teammate) -> rx.Component:
+    return rx.el.li(
+        rx.icon("user", class_name="h-5 w-5 shrink-0 text-[#246D67]"),
+        rx.el.div(
+            rx.el.p(
+                mate["full_name"],
+                class_name="break-words text-sm font-semibold text-[#172B3D]",
+            ),
+            rx.el.p(
+                mate["email"],
+                class_name="break-words text-xs text-[#667078]",
+            ),
+            class_name="min-w-0",
+        ),
+        class_name="flex items-center gap-3 py-3",
+    )
+
+
+def assigned_project_card(project: AssignedProject) -> rx.Component:
+    return rx.el.section(
+        rx.el.p(
+            project["course_label"],
+            class_name="text-xs font-semibold uppercase tracking-wide text-[#28766F]",
+        ),
+        rx.el.h2(
+            project["title"],
+            class_name="mt-2 break-words text-xl font-semibold text-[#172B3D]",
+        ),
+        rx.el.p(
+            "Sponsor: ",
+            project["sponsor_name"],
+            class_name="mt-1 text-sm text-[#667078]",
+        ),
+        rx.el.p(
+            project["description"],
+            class_name="mt-4 whitespace-pre-wrap break-words text-sm leading-7 text-[#4A5560]",
+        ),
+        rx.el.h3(
+            "Teammates",
+            class_name="mt-6 text-base font-semibold text-[#172B3D]",
+        ),
+        rx.cond(
+            project["teammates"].length() > 0,
+            rx.el.ul(
+                rx.foreach(project["teammates"], teammate_row),
+                class_name="mt-2 divide-y divide-[#E2E4DC]",
+            ),
+            rx.el.p(
+                "No teammates assigned yet.",
+                class_name="mt-2 text-sm text-[#667078]",
+            ),
+        ),
+        rx.el.a(
+            rx.icon("layout-dashboard", class_name="h-4 w-4"),
+            "Go to workspace",
+            href=f"/project/{project['project_id']}/workspace",
+            class_name=f"mt-6 {_BUTTON}",
+        ),
+        key=project["project_id"],
+        class_name="rounded-2xl border border-[#E2E4DC] bg-white p-6",
+    )
+
+
+def student_my_project_portal() -> rx.Component:
+    return _page(
+        "/student/my-project",
+        rx.el.div(
+            page_header("Student", "My project"),
+            rx.cond(
+                StudentMyProjectState.loading
+                | (StudentMyProjectState.authorized == False),
+                rx.el.p(
+                    "Loading your project…",
+                    role="status",
+                    class_name="py-12 text-center text-sm text-[#667078]",
+                ),
+                rx.cond(
+                    StudentMyProjectState.error != "",
+                    rx.el.div(
+                        rx.el.p(
+                            StudentMyProjectState.error,
+                            role="alert",
+                            class_name="text-sm text-red-700",
+                        ),
+                        rx.el.button(
+                            "Try again",
+                            type="button",
+                            on_click=StudentMyProjectState.load_my_project,
+                            class_name=f"mt-4 {_BUTTON}",
+                        ),
+                        class_name="rounded-2xl border border-[#E2E4DC] bg-white p-6",
+                    ),
+                    rx.cond(
+                        StudentMyProjectState.assignments.length() == 0,
+                        rx.el.div(
+                            rx.el.p(
+                                "Not assigned yet",
+                                class_name="text-base font-semibold text-[#172B3D]",
+                            ),
+                            rx.el.p(
+                                "Your faculty hasn't assigned you to a project. "
+                                "Check back after project assignments are released.",
+                                class_name="mt-2 text-sm text-[#667078]",
+                            ),
+                            class_name="rounded-2xl border border-[#E2E4DC] bg-white px-6 py-12 text-center",
+                        ),
+                        rx.el.div(
+                            rx.foreach(
+                                StudentMyProjectState.assignments,
+                                assigned_project_card,
+                            ),
+                            class_name="flex flex-col gap-6",
                         ),
                     ),
                 ),

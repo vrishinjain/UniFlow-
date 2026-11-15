@@ -12,6 +12,7 @@ from UniFlow_.states.admin_state import AdminState
 from UniFlow_.components.admin import ADMIN_PAGES
 from UniFlow_.components.student import (
     STUDENT_PAGES,
+    student_my_project_portal,
     student_projects_portal,
     student_project_detail_portal,
 )
@@ -19,6 +20,7 @@ from UniFlow_.components.faculty import FACULTY_PAGES
 from UniFlow_.components.sponsor import SPONSOR_PAGES
 from UniFlow_.states.student_state import (
     StudentState,
+    StudentMyProjectState,
     StudentProjectsState,
     StudentProjectDetailState,
 )
@@ -174,5 +176,15 @@ app.add_page(
     on_load=[
         StudentState.load_student,
         StudentProjectDetailState.load_student_project_detail,
+    ],
+)
+
+app.add_page(
+    student_my_project_portal,
+    route="/student/my-project",
+    title="My project · UniFlow",
+    on_load=[
+        StudentState.load_student,
+        StudentMyProjectState.load_my_project,
     ],
 )
