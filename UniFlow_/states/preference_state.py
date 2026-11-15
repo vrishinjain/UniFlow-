@@ -7,6 +7,7 @@ from typing import Any
 from UniFlow_.courses_services import EnrolledStudent
 from UniFlow_.preference_services import (
     CoursePreferenceForm,
+    StudentRanking,
     get_course_preference_status,
     get_student_preference_forms,
     save_student_preferences,
@@ -22,6 +23,7 @@ class CoursePreferencesState(rx.State):
     enrolled: int = 0
     submitted: int = 0
     missing: list[EnrolledStudent] = []
+    rankings: list[StudentRanking] = []
     loaded: bool = False
     busy: bool = False
     error: str = ""
@@ -32,6 +34,7 @@ class CoursePreferencesState(rx.State):
         self.enrolled = 0
         self.submitted = 0
         self.missing = []
+        self.rankings = []
         self.loaded = False
         self.busy = False
         self.error = ""
@@ -72,6 +75,7 @@ class CoursePreferencesState(rx.State):
                 self.enrolled = status["enrolled"]
                 self.submitted = status["submitted"]
                 self.missing = status["missing"]
+                self.rankings = status["rankings"]
                 self.loaded = True
 
     @rx.event(background=True)

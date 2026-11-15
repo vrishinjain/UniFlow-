@@ -4,6 +4,7 @@ from UniFlow_.components.student import _page
 from UniFlow_.courses_services import EnrolledStudent
 from UniFlow_.preference_services import (
     CoursePreferenceForm,
+    StudentRanking,
     PreferenceSlot,
     ProjectOption,
 )
@@ -27,6 +28,53 @@ def _missing_student(student: EnrolledStudent) -> rx.Component:
         rx.el.span(f" · {student['email']}", class_name="break-all text-[#667078]"),
         key=student["id"],
         class_name="py-2 text-sm",
+    )
+
+
+def _choice_cell(title) -> rx.Component:
+    return rx.el.td(
+        rx.cond(title != "", title, "—"),
+        class_name="px-4 py-3 text-sm text-[#4A5560]",
+    )
+
+
+def _ranking_row(row: StudentRanking) -> rx.Component:
+    return rx.el.tr(
+        rx.el.td(
+            rx.el.p(row["full_name"], class_name="font-medium text-[#172B3D]"),
+            rx.el.p(row["email"], class_name="break-all text-xs text-[#667078]"),
+            class_name="px-4 py-3 text-sm",
+        ),
+        _choice_cell(row["choice_1"]),
+        _choice_cell(row["choice_2"]),
+        _choice_cell(row["choice_3"]),
+        key=row["id"],
+        class_name="border-t border-[#E2E4DC] bg-white even:bg-[#F7F6EF]",
+    )
+
+
+def _rankings_table() -> rx.Component:
+    return rx.el.div(
+        rx.el.h3(
+            "Submitted rankings",
+            class_name="mt-6 text-sm font-semibold text-[#172B3D]",
+        ),
+        rx.el.div(
+            rx.el.table(
+                rx.el.thead(
+                    rx.el.tr(
+                        rx.el.th("Student", scope="col", class_name="px-4 py-3 text-left"),
+                        rx.el.th("1st choice", scope="col", class_name="px-4 py-3 text-left"),
+                        rx.el.th("2nd choice", scope="col", class_name="px-4 py-3 text-left"),
+                        rx.el.th("3rd choice", scope="col", class_name="px-4 py-3 text-left"),
+                    ),
+                    class_name="bg-[#F7F6EF] text-xs font-semibold text-[#4A5560]",
+                ),
+                rx.el.tbody(rx.foreach(CoursePreferencesState.rankings, _ranking_row)),
+                class_name="w-full min-w-[640px] table-auto",
+            ),
+            class_name="mt-2 w-full overflow-x-auto rounded-xl border border-[#E2E4DC]",
+        ),
     )
 
 
@@ -69,6 +117,7 @@ def course_preferences_panel() -> rx.Component:
                     f"{s.submitted} of {s.enrolled} students have submitted.",
                     class_name="text-sm font-medium text-[#172B3D]",
                 ),
+                rx.cond(s.rankings.length() > 0, _rankings_table()),
                 rx.cond(
                     s.missing.length() > 0,
                     rx.el.div(

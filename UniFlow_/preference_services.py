@@ -20,11 +20,21 @@ PREFERENCE_SLOTS = 3
 # ---------------------------------------------------------------- faculty --
 
 
+class StudentRanking(TypedDict):
+    id: int
+    full_name: str
+    email: str
+    choice_1: str
+    choice_2: str
+    choice_3: str
+
+
 class CoursePreferenceStatus(TypedDict):
     preferences_open: bool
     enrolled: int
     submitted: int
     missing: list[EnrolledStudent]
+    rankings: list[StudentRanking]
 
 
 def get_course_preference_status(
@@ -53,6 +63,34 @@ def get_course_preference_status(
             """),
             {"course_id": course_id},
         ).all()
+        ranked = session.execute(
+            text("""
+                SELECT u.id, u.full_name, u.email, sp.rank, p.title
+                FROM public.student_preference sp
+                JOIN public.users u ON u.id = sp.student
+                JOIN public.projects p ON p.id = sp.project
+                JOIN public.course_enrollments e
+                  ON e.student_id = sp.student AND e.course_id = sp.course
+                WHERE sp.course = :course_id
+                ORDER BY lower(u.full_name), lower(u.email), u.id, sp.rank
+            """),
+            {"course_id": course_id},
+        ).all()
+    rankings: dict[int, StudentRanking] = {}
+    for r in ranked:
+        row = rankings.setdefault(
+            int(r.id),
+            StudentRanking(
+                id=int(r.id),
+                full_name=str(r.full_name),
+                email=str(r.email),
+                choice_1="",
+                choice_2="",
+                choice_3="",
+            ),
+        )
+        if 1 <= int(r.rank) <= PREFERENCE_SLOTS:
+            row[f"choice_{int(r.rank)}"] = str(r.title)
     missing = [
         EnrolledStudent(id=int(r.id), full_name=str(r.full_name), email=str(r.email))
         for r in rows
@@ -63,6 +101,7 @@ def get_course_preference_status(
         enrolled=len(rows),
         submitted=len(rows) - len(missing),
         missing=missing,
+        rankings=list(rankings.values()),
     )
 
 
