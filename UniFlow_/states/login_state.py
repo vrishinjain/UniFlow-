@@ -42,12 +42,14 @@ class LoginState(rx.State):
         from UniFlow_.states.student_state import StudentState
         from UniFlow_.states.faculty_state import FacultyState
         from UniFlow_.states.sponsor_state import SponsorState
+        from UniFlow_.states.workspace_state import WorkspaceState
 
         for state_class in (
             AdminState,
             StudentState,
             FacultyState,
             SponsorState,
+            WorkspaceState,
         ):
             dashboard = await self.get_state(state_class)
             dashboard._clear_access()

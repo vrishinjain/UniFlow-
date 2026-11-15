@@ -115,6 +115,7 @@ def dashboard_layout(
     active: str,
     authorized,
     content: rx.Component,
+    wide: bool = False,
 ) -> rx.Component:
     """Wrap a page's content in the shared shell. `active` is the current route."""
     return rx.el.div(
@@ -132,7 +133,11 @@ def dashboard_layout(
                         class_name="py-24 text-center text-sm text-[#667078]",
                     ),
                 ),
-                class_name="mx-auto w-full max-w-5xl px-5 py-8 sm:px-8 sm:py-10",
+                class_name=rx.cond(
+                    wide,
+                    "w-full min-w-0 px-5 py-8 sm:px-8 sm:py-10",
+                    "mx-auto w-full max-w-5xl px-5 py-8 sm:px-8 sm:py-10",
+                ),
             ),
             class_name="flex min-w-0 flex-1 flex-col",
         ),
@@ -150,20 +155,31 @@ def page_header(eyebrow: str, title, description: str = "") -> rx.Component:
             title,
             class_name="mt-3 break-words text-3xl font-semibold tracking-tight text-[#172B3D]",
         ),
-        rx.el.p(description, class_name="mt-3 max-w-2xl text-sm leading-6 text-[#667078]")
+        rx.el.p(
+            description,
+            class_name="mt-3 max-w-2xl text-sm leading-6 text-[#667078]",
+        )
         if description
         else rx.fragment(),
         class_name="pb-8",
     )
 
 
-def home_content(role_label: str, nav: list[NavItem], full_name) -> rx.Component:
+def home_content(
+    role_label: str, nav: list[NavItem], full_name
+) -> rx.Component:
     """Welcome heading plus a card for every other section of the dashboard."""
     cards = [
         rx.el.a(
             rx.icon(item.icon, class_name="h-6 w-6 text-[#246D67]"),
-            rx.el.h2(item.label, class_name="mt-4 text-base font-semibold text-[#172B3D]"),
-            rx.el.p(item.description, class_name="mt-1 text-sm leading-6 text-[#667078]"),
+            rx.el.h2(
+                item.label,
+                class_name="mt-4 text-base font-semibold text-[#172B3D]",
+            ),
+            rx.el.p(
+                item.description,
+                class_name="mt-1 text-sm leading-6 text-[#667078]",
+            ),
             href=item.href,
             class_name="block rounded-2xl border border-[#E2E4DC] bg-white p-6 transition-colors hover:border-[#BFCFC9] hover:bg-[#FBFCF9]",
         )

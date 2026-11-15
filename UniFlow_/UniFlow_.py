@@ -1,4 +1,5 @@
 import reflex as rx
+import reflex_enterprise as rxe
 from datetime import timedelta
 from functools import wraps
 
@@ -30,6 +31,8 @@ from UniFlow_.states.sponsor_state import SponsorState
 from UniFlow_.states.sponsor_project_state import SponsorProjectState
 from UniFlow_.components.set_password import set_password_portal
 from UniFlow_.states.set_password_state import SetPasswordState
+from UniFlow_.components.workspace import workspace_portal
+from UniFlow_.states.workspace_state import WorkspaceState
 
 
 def _patch_connection_toaster_timeout() -> None:
@@ -70,7 +73,7 @@ def index() -> rx.Component:
     return identity_portal()
 
 
-app = rx.App(
+app = rxe.App(
     head_components=[
         rx.el.link(rel="preconnect", href="https://fonts.googleapis.com"),
         rx.el.link(
@@ -167,4 +170,11 @@ app.add_page(
         StudentState.load_student,
         StudentMyProjectState.load_my_project,
     ],
+)
+
+app.add_page(
+    workspace_portal,
+    route="/project/[project_id]/workspace",
+    title="Project workspace · UniFlow",
+    on_load=WorkspaceState.load_workspace,
 )
