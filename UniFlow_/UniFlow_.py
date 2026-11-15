@@ -27,6 +27,11 @@ from UniFlow_.states.review_state import ReviewState
 from UniFlow_.states.sponsor_state import SponsorState
 from UniFlow_.states.sponsor_project_state import SponsorProjectState
 from UniFlow_.components.set_password import set_password_portal
+from UniFlow_.components.preferences import student_preferences_portal
+from UniFlow_.states.preference_state import (
+    CoursePreferencesState,
+    StudentPreferencesState,
+)
 from UniFlow_.states.set_password_state import SetPasswordState
 
 
@@ -121,6 +126,11 @@ for pages, on_load in (
                 SponsorState.load_sponsor,
                 SponsorProjectState.load_project,
             ]
+        elif route == "/faculty/course/[id]":
+            page_on_load = [
+                FacultyState.load_faculty,
+                CoursePreferencesState.load_panel,
+            ]
         elif route == "/faculty/project/[id]":
             page_on_load = [
                 FacultyState.load_faculty,
@@ -129,6 +139,16 @@ for pages, on_load in (
         app.add_page(
             page, route=route, title=f"{title} · UniFlow", on_load=page_on_load
         )
+
+app.add_page(
+    student_preferences_portal,
+    route="/student/preferences",
+    title="Project preferences · UniFlow",
+    on_load=[
+        StudentState.load_student,
+        StudentPreferencesState.load_preferences,
+    ],
+)
 
 app.add_page(
     set_password_portal,

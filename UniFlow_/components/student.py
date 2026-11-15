@@ -29,6 +29,12 @@ STUDENT_NAV = [
         "/student/browse",
         "Explore available capstone and research projects.",
     ),
+    NavItem(
+        "Preferences",
+        "list-ordered",
+        "/student/preferences",
+        "Rank the projects you'd like to work on.",
+    ),
 ]
 
 
