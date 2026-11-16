@@ -1,5 +1,4 @@
 import reflex as rx
-import reflex_enterprise as rxe
 
 from UniFlow_.components.admin import ADMIN_NAV
 from UniFlow_.components.dashboard_layout import dashboard_layout, page_header
@@ -90,26 +89,15 @@ def assignee_filter() -> rx.Component:
 
 
 @rx.memo
-def ticket_drag_handle(ticket_id: rx.Var[str]) -> rx.Component:
-    return rxe.dnd.draggable(
-        rx.el.button(
-            rx.icon("grip-vertical", class_name="h-4 w-4 text-[#667078]"),
-            type="button",
-            aria_label="Drag ticket, or press Enter to pick up for a keyboard move",
-            aria_pressed=WorkspaceState.keyboard_ticket_id == ticket_id,
-            disabled=WorkspaceState.mutation_pending,
-            on_click=WorkspaceState.keyboard_pickup(ticket_id),
-            class_name="cursor-grab rounded-md bg-white p-1.5 text-[#667078] hover:bg-[#EAF3EF] focus-visible:outline-2 focus-visible:outline-[#246D67] active:cursor-grabbing disabled:cursor-wait disabled:opacity-50",
-        ),
-        type="WorkspaceTicket",
-        item={"id": f"ticket:{ticket_id}"},
-        can_drag=(
-            ~WorkspaceState.mutation_pending
-            & ~WorkspaceState.dialog_open
-            & ~WorkspaceState.delete_open
-            & ~WorkspaceState.milestone_dialog_open
-        ),
-        class_name="w-fit shrink-0",
+def ticket_move_handle(ticket_id: rx.Var[str]) -> rx.Component:
+    return rx.el.button(
+        rx.icon("grip-vertical", class_name="h-4 w-4 text-[#667078]"),
+        type="button",
+        aria_label="Select ticket to move, then use a column's Move here button",
+        aria_pressed=WorkspaceState.keyboard_ticket_id == ticket_id,
+        disabled=WorkspaceState.mutation_pending,
+        on_click=WorkspaceState.keyboard_pickup(ticket_id),
+        class_name="w-fit shrink-0 cursor-pointer rounded-md bg-white p-1.5 text-[#667078] hover:bg-[#EAF3EF] focus-visible:outline-2 focus-visible:outline-[#246D67] disabled:cursor-wait disabled:opacity-50",
     )
 
 
@@ -187,7 +175,7 @@ def ticket_status_control(ticket: WorkspaceTicket) -> rx.Component:
 def workspace_ticket(ticket: WorkspaceTicket) -> rx.Component:
     return rx.el.article(
         rx.el.div(
-            ticket_drag_handle(ticket_id=ticket["id"]),
+            ticket_move_handle(ticket_id=ticket["id"]),
             rx.el.h4(
                 ticket["title"],
                 class_name="min-w-0 flex-1 break-words text-base font-semibold text-[#172B3D]",
@@ -257,55 +245,48 @@ def workspace_ticket(ticket: WorkspaceTicket) -> rx.Component:
 def workspace_column(
     column: rx.Var[dict[str, str | list[WorkspaceTicket]]],
 ) -> rx.Component:
-    return rxe.dnd.drop_target(
-        rx.el.section(
-            rx.el.div(
-                rx.el.h3(
-                    column["status"].to(str),
-                    class_name="text-sm font-semibold text-[#172B3D]",
-                ),
-                rx.el.span(
-                    column["tickets"].to(list[WorkspaceTicket]).length(),
-                    aria_label="Ticket count",
-                    class_name="w-fit rounded-full border border-[#E2E4DC] bg-white px-2.5 py-1 text-xs font-semibold text-[#667078]",
-                ),
-                class_name="mb-4 flex items-center justify-between gap-3",
+    return rx.el.section(
+        rx.el.div(
+            rx.el.h3(
+                column["status"].to(str),
+                class_name="text-sm font-semibold text-[#172B3D]",
             ),
-            rx.cond(
-                column["tickets"].to(list[WorkspaceTicket]).length() > 0,
-                rx.el.div(
-                    rx.foreach(
-                        column["tickets"].to(list[WorkspaceTicket]),
-                        workspace_ticket,
-                    ),
-                    class_name="flex flex-col gap-3",
-                ),
-                rx.el.p(
-                    WorkspaceState.empty_column_message,
-                    class_name="rounded-xl border border-dashed border-[#E2E4DC] bg-white px-4 py-8 text-center text-sm leading-6 text-[#667078]",
-                ),
+            rx.el.span(
+                column["tickets"].to(list[WorkspaceTicket]).length(),
+                aria_label="Ticket count",
+                class_name="w-fit rounded-full border border-[#E2E4DC] bg-white px-2.5 py-1 text-xs font-semibold text-[#667078]",
             ),
-            rx.cond(
-                WorkspaceState.keyboard_ticket_id != "",
-                rx.el.button(
-                    "Move here",
-                    aria_label=f"Move selected ticket to {column['status'].to(str)}",
-                    on_click=WorkspaceState.keyboard_drop(
-                        column["status"].to(str)
-                    ),
-                    disabled=WorkspaceState.mutation_pending,
-                    class_name="mt-4 w-full rounded-lg bg-[#246D67] px-3 py-2 text-sm font-semibold text-white hover:bg-[#1C5752] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#246D67] disabled:opacity-60",
-                ),
-                rx.fragment(),
-            ),
-            class_name="min-h-72 min-w-0 rounded-2xl border border-[#E2E4DC] bg-[#F0F2EC] p-4",
+            class_name="mb-4 flex items-center justify-between gap-3",
         ),
-        accept=["WorkspaceTicket"],
-        on_drop=lambda item: WorkspaceState.drop_ticket(
-            item, f"column:{column['status'].to(str)}"
+        rx.cond(
+            column["tickets"].to(list[WorkspaceTicket]).length() > 0,
+            rx.el.div(
+                rx.foreach(
+                    column["tickets"].to(list[WorkspaceTicket]),
+                    workspace_ticket,
+                ),
+                class_name="flex flex-col gap-3",
+            ),
+            rx.el.p(
+                WorkspaceState.empty_column_message,
+                class_name="rounded-xl border border-dashed border-[#E2E4DC] bg-white px-4 py-8 text-center text-sm leading-6 text-[#667078]",
+            ),
+        ),
+        rx.cond(
+            WorkspaceState.keyboard_ticket_id != "",
+            rx.el.button(
+                "Move here",
+                aria_label=f"Move selected ticket to {column['status'].to(str)}",
+                on_click=WorkspaceState.keyboard_drop(
+                    column["status"].to(str)
+                ),
+                disabled=WorkspaceState.mutation_pending,
+                class_name="mt-4 w-full rounded-lg bg-[#246D67] px-3 py-2 text-sm font-semibold text-white hover:bg-[#1C5752] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#246D67] disabled:opacity-60",
+            ),
+            rx.fragment(),
         ),
         key=f"column:{column['status'].to(str)}",
-        class_name="h-full min-w-0 rounded-2xl focus-within:ring-1 focus-within:ring-[#246D67]",
+        class_name="h-full min-h-72 min-w-0 rounded-2xl border border-[#E2E4DC] bg-[#F0F2EC] p-4 focus-within:ring-1 focus-within:ring-[#246D67]",
     )
 
 

@@ -1,5 +1,4 @@
 import reflex as rx
-import reflex_enterprise as rxe
 from datetime import timedelta
 from functools import wraps
 
@@ -73,7 +72,7 @@ def index() -> rx.Component:
     return identity_portal()
 
 
-app = rxe.App(
+app = rx.App(
     head_components=[
         rx.el.link(rel="preconnect", href="https://fonts.googleapis.com"),
         rx.el.link(

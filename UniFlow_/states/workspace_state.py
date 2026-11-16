@@ -687,32 +687,6 @@ class WorkspaceState(rx.State):
         )
 
     @rx.event
-    async def drop_ticket(self, item: dict[str, Any], target: str):
-        if not await self._session_allowed() or self.mutation_pending:
-            return
-        source = item.get("id", "")
-        if not isinstance(source, str) or not source.startswith("ticket:"):
-            self.mutation_error = "Invalid ticket drop."
-            return
-        ticket_id = source.removeprefix("ticket:")
-        if target.startswith("column:"):
-            status = target.removeprefix("column:")
-        elif target.startswith("ticket:"):
-            target_id = target.removeprefix("ticket:")
-            ticket = next(
-                (
-                    ticket
-                    for ticket in self.tickets
-                    if ticket["id"] == target_id
-                ),
-                None,
-            )
-            status = ticket["status"] if ticket else ""
-        else:
-            status = ""
-        return WorkspaceState.change_status(ticket_id, status)
-
-    @rx.event
     async def keyboard_pickup(self, ticket_id: str):
         if (
             not await self._session_allowed()

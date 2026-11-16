@@ -201,7 +201,6 @@ class TicketValidationTests(unittest.TestCase):
             "submit_ticket",
             "confirm_delete",
             "change_status",
-            "drop_ticket",
             "keyboard_pickup",
             "keyboard_drop",
             "mutate_ticket",
