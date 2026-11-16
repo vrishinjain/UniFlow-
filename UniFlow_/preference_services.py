@@ -308,11 +308,9 @@ def save_student_preferences(
                     },
                 )
     except IntegrityError as e:
-        # The current unique constraints are (student, rank) and
-        # (student, project) across ALL courses, so a student who already
-        # ranked in another course hits this. See PR notes.
+        # Constraints are per course (#115), so this only happens on a
+        # duplicate or concurrent submit.
         logging.exception(f"Error: {e}")
         raise ValueError(
-            "You already have preferences saved in another course. "
-            "Ranking in more than one course isn't supported yet."
+            "Your preferences could not be saved. Please try again."
         ) from e
