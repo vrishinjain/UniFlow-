@@ -1,0 +1,12 @@
+alex.rivera@example.edu joins Project2
+bianca.chen@example.edu joins Project3
+carlos.diaz@example.edu joins Project1
+dana.okafor@example.edu joins Project1
+eli.brooks@example.edu joins Project1
+fatima.noor@example.edu joins Project2
+grace.kim@example.edu joins Project2
+hiro.tanaka@example.edu joins Project3
+isla.murphy@example.edu joins Project3
+jonah.weiss@example.edu joins Project4
+kira.patel@example.edu joins Project4
+leo.santos@example.edu joins Project3
