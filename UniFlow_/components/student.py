@@ -30,6 +30,12 @@ STUDENT_NAV = [
         "/student/projects",
         "See projects shared with your courses.",
     ),
+    NavItem(
+        "Preferences",
+        "list-ordered",
+        "/student/preferences",
+        "Rank the projects you'd like to work on.",
+    ),
 ]
 
 

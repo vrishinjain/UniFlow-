@@ -1,5 +1,6 @@
 import reflex as rx
 
+from UniFlow_.components.preferences import course_preferences_panel
 from UniFlow_.courses_services import EnrolledStudent
 from UniFlow_.states.faculty_state import FacultyState
 from UniFlow_.user_services import BULK_EMAIL_MAX_BYTES, CourseEmailEntry
@@ -345,6 +346,7 @@ def course_detail_content() -> rx.Component:
                             class_name="mt-3 break-words text-sm font-medium text-[#4A5560]",
                         ),
                         _enrolled_students(),
+                        course_preferences_panel(),
                         _single_enrollment(),
                         _bulk_enrollment(),
                         class_name="w-full min-w-0",
