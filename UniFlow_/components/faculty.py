@@ -250,7 +250,10 @@ def faculty_project_details() -> rx.Component:
     )
 
 
-def _student_project_row(student: CourseStudentRow) -> rx.Component:
+def _student_project_row(
+    student: CourseStudentRow, course: FacultyCourseStudents
+) -> rx.Component:
+    s = FacultyStudentsState
     return rx.el.tr(
         rx.el.td(
             student["full_name"],
@@ -271,6 +274,43 @@ def _student_project_row(student: CourseStudentRow) -> rx.Component:
                     "Unassigned",
                     class_name="rounded-full bg-[#F7EBD9] px-2.5 py-1 text-xs font-semibold text-[#8A5A14]",
                 ),
+            ),
+            class_name="px-4 py-3",
+        ),
+        # T12 (#101): Manual assignment controls.
+        rx.el.td(
+            rx.hstack(
+                rx.select.root(
+                    rx.select.trigger(placeholder="Select project"),
+                    rx.select.content(
+                        rx.foreach(
+                            s.available_projects[course["course_id"]],
+                            lambda project: rx.select.item(
+                                project["title"], value=project["id"]
+                            ),
+                        ),
+                    ),
+                    value="",
+                    on_change=lambda value: s.change_assignment(
+                        course["course_id"], student["id"], value
+                    ),
+                    disabled=s.assignment_busy | s.loading,
+                ),
+                rx.button(
+                    "Unassign",
+                    on_click=s.unassign_student(
+                        course["course_id"], student["id"]
+                    ),
+                    disabled=(
+                        s.assignment_busy | s.loading
+                        | (student["project_title"] == "")
+                    ),
+                    color_scheme="red",
+                    variant="outline",
+                    size="2",
+                ),
+                spacing="2",
+                align="center",
             ),
             class_name="px-4 py-3",
         ),
@@ -301,11 +341,17 @@ def _course_students_card(course: FacultyCourseStudents) -> rx.Component:
                             rx.el.th("Name", scope="col", class_name="px-4 py-3 text-left"),
                             rx.el.th("Email", scope="col", class_name="px-4 py-3 text-left"),
                             rx.el.th("Project", scope="col", class_name="px-4 py-3 text-left"),
+                            rx.el.th("Actions", scope="col", class_name="px-4 py-3 text-left"),
                         ),
                         class_name="bg-[#F7F6EF] text-xs font-semibold text-[#4A5560]",
                     ),
-                    rx.el.tbody(rx.foreach(course["students"], _student_project_row)),
-                    class_name="w-full min-w-[560px] table-auto",
+                    rx.el.tbody(
+                        rx.foreach(
+                            course["students"],
+                            lambda student: _student_project_row(student, course),
+                        )
+                    ),
+                    class_name="w-full min-w-[800px] table-auto",
                 ),
                 class_name="mt-4 w-full overflow-x-auto rounded-xl border border-[#E2E4DC]",
             ),
@@ -330,6 +376,22 @@ def faculty_students() -> rx.Component:
         "/faculty/students",
         rx.el.div(
             page_header("Faculty", "My students"),
+            rx.cond(
+                s.assignment_message != "",
+                rx.el.p(
+                    s.assignment_message,
+                    role="status",
+                    class_name="mb-4 text-sm text-[#246D67]",
+                ),
+            ),
+            rx.cond(
+                s.assignment_error != "",
+                rx.el.p(
+                    s.assignment_error,
+                    role="alert",
+                    class_name="mb-4 text-sm text-red-700",
+                ),
+            ),
             rx.cond(
                 s.loading,
                 rx.el.p(
