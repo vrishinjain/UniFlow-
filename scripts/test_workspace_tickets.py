@@ -213,6 +213,8 @@ class TicketValidationTests(unittest.TestCase):
         self.assertIn("asyncio.to_thread", ast.unparse(events["mutate_ticket"]))
 
     def test_component_construction(self):
+        # Importing the app registers the [project_id] route variable on rx.State.
+        import UniFlow_.UniFlow_  # noqa: F401
         from UniFlow_.components.workspace import workspace_portal
         from UniFlow_.components.workspace_ticket_dialogs import ticket_dialogs
 
