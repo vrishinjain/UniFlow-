@@ -1,5 +1,6 @@
 import reflex as rx
 
+from UniFlow_.components.assignment import assignment_section
 from UniFlow_.courses_services import EnrolledStudent
 from UniFlow_.states.faculty_state import FacultyState
 from UniFlow_.user_services import BULK_EMAIL_MAX_BYTES, CourseEmailEntry
@@ -358,6 +359,7 @@ def course_detail_content() -> rx.Component:
             ),
         ),
         _enrollment_feedback(),
+        rx.cond(FacultyState.course_detail_ready, assignment_section()),
         custom_attrs={
             "aria-busy": FacultyState.enrollment_busy
             | FacultyState.course_detail_loading
