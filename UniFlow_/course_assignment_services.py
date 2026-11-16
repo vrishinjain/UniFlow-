@@ -197,6 +197,17 @@ def parse_assignment_text(content: str) -> list[AssignmentTextLine]:
     return parsed
 
 
+def _visible_assignment_projects(session: Session, course_id: int):
+    return session.execute(
+        text(
+            "SELECT p.id, p.title FROM public.projects p "
+            "JOIN public.project_course_visibility v ON v.project_id = p.id "
+            "WHERE v.course_id = :course_id AND p.status = 'accepted' FOR SHARE OF p, v"
+        ),
+        {"course_id": course_id},
+    ).all()
+
+
 def _validate_assignment_text(
     session: Session, course_id: int, content: str
 ) -> AssignmentPreview:
@@ -232,14 +243,7 @@ def _validate_assignment_text(
         ).all()
     }
     projects: dict[str, set[int]] = {}
-    for project in session.execute(
-        text(
-            "SELECT p.id, p.title FROM public.projects p "
-            "JOIN public.project_course_visibility v ON v.project_id = p.id "
-            "WHERE v.course_id = :course_id AND p.status = 'accepted' FOR SHARE OF p, v"
-        ),
-        {"course_id": course_id},
-    ).all():
+    for project in _visible_assignment_projects(session, course_id):
         projects.setdefault(str(project.title), set()).add(int(project.id))
     seen: set[int] = set()
     valid: list[ValidAssignment] = []
@@ -393,3 +397,130 @@ def save_course_assignments(
             f"Saved {result['saved']} assignments. Skipped {len(result['skipped'])} rows."
         )
         return result
+
+
+# T12 (#101): Manual assignment edits for faculty
+
+
+def update_manual_assignment(
+    actor_id: int,
+    course_id: int,
+    student_id: int,
+    project_id: int | None,
+) -> str:
+    """Assign, move, or unassign one student in a course."""
+
+    course_id = parse_course_id(course_id)
+    _validate_user_id(student_id)
+
+    with _transaction() as session:
+        _require_course_access(session, actor_id, course_id)
+
+        student = session.execute(
+            text(
+                "SELECT u.id, u.email FROM public.users u "
+                "JOIN public.course_enrollments e "
+                "ON e.student_id = u.id "
+                "WHERE u.id = :student_id "
+                "AND e.course_id = :course_id "
+                "AND u.role = 'student' FOR SHARE OF u, e"
+            ),
+            {
+                "student_id": student_id,
+                "course_id": course_id,
+            },
+        ).first()
+
+        if student is None:
+            raise ValueError("Student not enrolled in this course")
+
+        if project_id is None:
+            session.execute(
+                text(
+                    "DELETE FROM public.project_assignment "
+                    "WHERE student = :student_id "
+                    "AND course = :course_id"
+                ),
+                {
+                    "student_id": student_id,
+                    "course_id": course_id,
+                },
+            )
+
+            return "Student unassigned successfully."
+
+        project = session.execute(
+            text(
+                "SELECT id, title FROM public.projects "
+                "WHERE id = :project_id FOR SHARE"
+            ),
+            {"project_id": project_id},
+        ).first()
+
+        if project is None:
+            raise ValueError("Project not found")
+
+        # Apply the same project eligibility rules as assignment import.
+        visible_projects = _visible_assignment_projects(session, course_id)
+
+        if project_id not in {int(row.id) for row in visible_projects}:
+            raise ValueError("Project not visible to this course")
+
+        session.execute(
+            text(
+                "INSERT INTO public.project_assignment "
+                "(student, project, course, assigned_by) "
+                "VALUES (:student_id, :project_id, "
+                ":course_id, :actor_id) "
+                "ON CONFLICT (student, course) DO UPDATE SET "
+                "project = EXCLUDED.project, "
+                "assigned_by = EXCLUDED.assigned_by, "
+                "assigned_at = now()"
+            ),
+            {
+                "student_id": student_id,
+                "project_id": project_id,
+                "course_id": course_id,
+                "actor_id": actor_id,
+            },
+        )
+
+        return "Student assignment updated successfully."
+
+
+class ManualProjectOption(TypedDict):
+    id: str
+    title: str
+
+
+def list_manual_assignment_projects(
+    actor_id: int,
+    course_id: int,
+) -> list[ManualProjectOption]:
+    """Return accepted projects visible to this course."""
+
+    course_id = parse_course_id(course_id)
+
+    with _transaction() as session:
+        _require_course_access(session, actor_id, course_id)
+
+        projects = session.execute(
+            text(
+                "SELECT DISTINCT p.id, p.title "
+                "FROM public.projects p "
+                "JOIN public.project_course_visibility v "
+                "ON v.project_id = p.id "
+                "WHERE v.course_id = :course_id "
+                "AND p.status = 'accepted' "
+                "ORDER BY p.title, p.id"
+            ),
+            {"course_id": course_id},
+        ).all()
+
+        return [
+            ManualProjectOption(
+                id=str(project.id),
+                title=str(project.title),
+            )
+            for project in projects
+        ]
