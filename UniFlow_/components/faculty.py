@@ -10,6 +10,8 @@ from UniFlow_.components.dashboard_layout import (
 from UniFlow_.states.faculty_state import FacultyState
 from UniFlow_.components.review_panel import review_panel
 from UniFlow_.courses_services import CourseRow
+from UniFlow_.assignment_services import CourseStudentRow, FacultyCourseStudents
+from UniFlow_.states.faculty_students_state import FacultyStudentsState
 from UniFlow_.components.course_detail import course_detail_content
 
 
@@ -248,12 +250,118 @@ def faculty_project_details() -> rx.Component:
     )
 
 
+def _student_project_row(student: CourseStudentRow) -> rx.Component:
+    return rx.el.tr(
+        rx.el.td(
+            student["full_name"],
+            class_name="px-4 py-3 text-sm font-medium text-[#172B3D]",
+        ),
+        rx.el.td(
+            student["email"],
+            class_name="break-all px-4 py-3 text-sm text-[#4A5560]",
+        ),
+        rx.el.td(
+            rx.cond(
+                student["project_title"] != "",
+                rx.el.span(
+                    student["project_title"],
+                    class_name="text-sm text-[#172B3D]",
+                ),
+                rx.el.span(
+                    "Unassigned",
+                    class_name="rounded-full bg-[#F7EBD9] px-2.5 py-1 text-xs font-semibold text-[#8A5A14]",
+                ),
+            ),
+            class_name="px-4 py-3",
+        ),
+        key=student["id"],
+        class_name="border-t border-[#E2E4DC] bg-white even:bg-[#F7F6EF]",
+    )
+
+
+def _course_students_card(course: FacultyCourseStudents) -> rx.Component:
+    return rx.el.section(
+        rx.el.div(
+            rx.el.h2(
+                course["course_label"],
+                class_name="break-words text-lg font-semibold text-[#172B3D]",
+            ),
+            rx.el.p(
+                f"{course['assigned']} of {course['total']} assigned",
+                class_name="text-sm text-[#667078]",
+            ),
+            class_name="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between",
+        ),
+        rx.cond(
+            course["total"] > 0,
+            rx.el.div(
+                rx.el.table(
+                    rx.el.thead(
+                        rx.el.tr(
+                            rx.el.th("Name", scope="col", class_name="px-4 py-3 text-left"),
+                            rx.el.th("Email", scope="col", class_name="px-4 py-3 text-left"),
+                            rx.el.th("Project", scope="col", class_name="px-4 py-3 text-left"),
+                        ),
+                        class_name="bg-[#F7F6EF] text-xs font-semibold text-[#4A5560]",
+                    ),
+                    rx.el.tbody(rx.foreach(course["students"], _student_project_row)),
+                    class_name="w-full min-w-[560px] table-auto",
+                ),
+                class_name="mt-4 w-full overflow-x-auto rounded-xl border border-[#E2E4DC]",
+            ),
+            rx.el.p(
+                "No students are enrolled in this course yet.",
+                class_name="mt-3 text-sm text-[#667078]",
+            ),
+        ),
+        rx.el.a(
+            "Open course",
+            href=f"/faculty/course/{course['course_id']}",
+            class_name="mt-4 inline-flex text-sm font-semibold text-[#246D67] hover:underline",
+        ),
+        key=course["course_id"],
+        class_name="w-full min-w-0 rounded-2xl border border-[#E2E4DC] bg-white p-6",
+    )
+
+
 def faculty_students() -> rx.Component:
+    s = FacultyStudentsState
     return _page(
         "/faculty/students",
-        coming_soon(
-            "Faculty",
-            FACULTY_NAV[2],
+        rx.el.div(
+            page_header("Faculty", "My students"),
+            rx.cond(
+                s.loading,
+                rx.el.p(
+                    "Loading students…",
+                    role="status",
+                    class_name="py-12 text-center text-sm text-[#667078]",
+                ),
+                rx.cond(
+                    s.error != "",
+                    rx.el.div(
+                        rx.el.p(s.error, role="alert", class_name="text-sm text-red-700"),
+                        rx.el.button(
+                            "Try again",
+                            type="button",
+                            on_click=s.load_students,
+                            class_name="mt-4 rounded-lg bg-[#246D67] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1C5752]",
+                        ),
+                        class_name="rounded-2xl border border-[#E2E4DC] bg-white p-6",
+                    ),
+                    rx.cond(
+                        s.courses.length() == 0,
+                        rx.el.p(
+                            "You don't have any courses yet. Create one under Courses.",
+                            class_name="rounded-2xl border border-[#E2E4DC] bg-white px-6 py-12 text-center text-sm text-[#667078]",
+                        ),
+                        rx.el.div(
+                            rx.foreach(s.courses, _course_students_card),
+                            class_name="flex flex-col gap-6",
+                        ),
+                    ),
+                ),
+            ),
         ),
     )
 

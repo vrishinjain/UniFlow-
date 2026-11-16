@@ -103,10 +103,10 @@ class StudentPreference(Base):
     __tablename__ = "student_preference"
     __table_args__ = (
         UniqueConstraint(
-            "student", "project", name="student_preference_student_project_key"
+                        "student", "course", "project", name="student_preference_student_course_project_key"
         ),
         UniqueConstraint(
-            "student", "rank", name="student_preference_student_rank_key"
+                        "student", "course", "rank", name="student_preference_student_course_rank_key"
         ),
         {"schema": "public"},
     )
