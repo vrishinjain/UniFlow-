@@ -2,6 +2,7 @@ import reflex as rx
 
 from UniFlow_.components.dashboard_layout import (
     NavItem,
+    coming_soon,
     dashboard_layout,
     home_content,
     page_header,
@@ -30,6 +31,12 @@ STUDENT_NAV = [
         "/student/projects",
         "See projects shared with your courses.",
     ),
+    NavItem(
+        "Browse projects",
+        "search",
+        "/student/browse",
+        "Explore available capstone and research projects.",
+    ),
 ]
 
 
@@ -49,6 +56,11 @@ def student_welcome_card() -> rx.Component:
 
 def student_home() -> rx.Component:
     return _page("/student", student_welcome_card())
+
+
+def student_browse() -> rx.Component:
+    # Later sprint.
+    return _page("/student/browse", coming_soon("Student", STUDENT_NAV[3]))
 
 
 def shared_project_card(project: SharedStudentProject) -> rx.Component:
@@ -370,4 +382,5 @@ def student_my_project_portal() -> rx.Component:
 # with StudentState's on_load check, so every page is protected the same way.
 STUDENT_PAGES = [
     (student_home, "/student", "Student Dashboard"),
+    (student_browse, "/student/browse", "Browse projects"),
 ]

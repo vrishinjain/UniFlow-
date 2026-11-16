@@ -25,7 +25,6 @@ from UniFlow_.states.student_state import (
     StudentProjectDetailState,
 )
 from UniFlow_.states.faculty_state import FacultyState
-from UniFlow_.states.faculty_students_state import FacultyStudentsState
 from UniFlow_.states.review_state import ReviewState
 from UniFlow_.states.sponsor_state import SponsorState
 from UniFlow_.states.sponsor_project_state import SponsorProjectState
@@ -123,11 +122,6 @@ for pages, on_load in (
             page_on_load = [
                 SponsorState.load_sponsor,
                 SponsorProjectState.load_project,
-            ]
-        elif route == "/faculty/students":
-            page_on_load = [
-                FacultyState.load_faculty,
-                FacultyStudentsState.load_students,
             ]
         elif route == "/faculty/project/[id]":
             page_on_load = [
