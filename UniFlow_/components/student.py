@@ -6,6 +6,7 @@ from UniFlow_.components.dashboard_layout import (
     home_content,
     page_header,
 )
+from UniFlow_.states.workspace_state import WorkspaceState
 from UniFlow_.assignment_services import AssignedProject, Teammate
 from UniFlow_.project_services import SharedStudentProject, StudentProjectFile
 from UniFlow_.states.student_state import (
@@ -277,7 +278,12 @@ def assigned_project_card(project: AssignedProject) -> rx.Component:
             class_name="text-xs font-semibold uppercase tracking-wide text-[#28766F]",
         ),
         rx.el.h2(
-            project["title"],
+            rx.el.a(
+                project["title"],
+                href=f"/project/{project['project_id']}/workspace",
+                on_click=WorkspaceState.clear_workspace,
+                class_name="rounded-sm text-[#172B3D] hover:text-[#246D67] hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#246D67]",
+            ),
             class_name="mt-2 break-words text-xl font-semibold text-[#172B3D]",
         ),
         rx.el.p(
@@ -308,7 +314,8 @@ def assigned_project_card(project: AssignedProject) -> rx.Component:
             rx.icon("layout-dashboard", class_name="h-4 w-4"),
             "Go to workspace",
             href=f"/project/{project['project_id']}/workspace",
-            class_name=f"mt-6 {_BUTTON}",
+            on_click=WorkspaceState.clear_workspace,
+            class_name="mt-6 flex w-fit items-center gap-2 rounded-lg bg-[#246D67] px-4 py-2 text-sm font-semibold text-white hover:bg-[#1C5752] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#28766F]",
         ),
         key=project["project_id"],
         class_name="rounded-2xl border border-[#E2E4DC] bg-white p-6",

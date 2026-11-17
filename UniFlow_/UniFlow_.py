@@ -36,6 +36,8 @@ from UniFlow_.states.preference_state import (
     StudentPreferencesState,
 )
 from UniFlow_.states.set_password_state import SetPasswordState
+from UniFlow_.components.workspace import workspace_portal
+from UniFlow_.states.workspace_state import WorkspaceState
 
 
 def _patch_connection_toaster_timeout() -> None:
@@ -193,4 +195,11 @@ app.add_page(
         StudentState.load_student,
         StudentMyProjectState.load_my_project,
     ],
+)
+
+app.add_page(
+    workspace_portal,
+    route="/project/[project_id]/workspace",
+    title="Project workspace · UniFlow",
+    on_load=WorkspaceState.load_workspace,
 )
