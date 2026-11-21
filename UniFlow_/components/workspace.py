@@ -12,6 +12,7 @@ from UniFlow_.workspace_services import (
     TICKET_STATUSES,
 )
 from UniFlow_.components.workspace_ticket_dialogs import ticket_dialogs
+from UniFlow_.components.workspace_chat import workspace_chat
 from UniFlow_.components.workspace_milestones import (
     milestones_section,
     milestone_filter,
@@ -311,6 +312,7 @@ def workspace_content() -> rx.Component:
             ),
             class_name="mb-8 rounded-2xl border border-[#E2E4DC] bg-white p-6",
         ),
+        workspace_chat(),
         milestones_section(),
         rx.el.div(
             milestone_filter(),
