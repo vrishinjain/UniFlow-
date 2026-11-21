@@ -38,6 +38,7 @@ from UniFlow_.states.preference_state import (
 from UniFlow_.states.set_password_state import SetPasswordState
 from UniFlow_.components.workspace import workspace_portal
 from UniFlow_.states.workspace_state import WorkspaceState
+from UniFlow_.states.workspace_list_state import WorkspaceListState
 
 
 def _patch_connection_toaster_timeout() -> None:
@@ -141,6 +142,16 @@ for pages, on_load in (
                 FacultyState.load_faculty,
                 FacultyStudentsState.load_students,
             ]
+        elif route == "/faculty/workspaces":
+            page_on_load = [
+                FacultyState.load_faculty,
+                WorkspaceListState.load_faculty_workspaces,
+            ]
+        elif route == "/admin/workspaces":
+            page_on_load = [
+                AdminState.load_admin,
+                WorkspaceListState.load_admin_workspaces,
+            ]
         elif route == "/faculty/project/[id]":
             page_on_load = [
                 FacultyState.load_faculty,
@@ -170,7 +181,7 @@ app.add_page(
 app.add_page(
     student_projects_portal,
     route="/student/projects",
-    title="My Projects · UniFlow",
+    title="Course projects · UniFlow",
     on_load=[
         StudentState.load_student,
         StudentProjectsState.load_student_projects,

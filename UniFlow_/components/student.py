@@ -79,7 +79,7 @@ def student_projects_portal() -> rx.Component:
     return _page(
         "/student/projects",
         rx.el.div(
-            page_header("Student", "My Projects"),
+            page_header("Student", "Course projects"),
             rx.cond(
                 StudentProjectsState.loading,
                 rx.el.p(
