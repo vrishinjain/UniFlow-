@@ -8,6 +8,8 @@ from UniFlow_.components.dashboard_layout import (
 
 from UniFlow_.states.admin_state import AdminState, ApprovedUser, PendingRequest
 from UniFlow_.components.bulk_email_import import bulk_email_import
+from UniFlow_.components.workspace_list import workspace_list_content
+from UniFlow_.states.workspace_list_state import WorkspaceListState
 
 
 def request_row(request: PendingRequest) -> rx.Component:
@@ -134,6 +136,12 @@ ADMIN_NAV = [
         "user-check",
         "/admin/users",
         "See every account with active access.",
+    ),
+    NavItem(
+        "Project workspaces",
+        "folder-kanban",
+        "/admin/workspaces",
+        "Open the workspace of any project with a team.",
     ),
 ]
 
@@ -353,9 +361,21 @@ def admin_users() -> rx.Component:
     )
 
 
+def admin_workspaces() -> rx.Component:
+    return _page(
+        "/admin/workspaces",
+        workspace_list_content(
+            "System administration",
+            "Every accepted project that has students assigned.",
+            WorkspaceListState.load_admin_workspaces,
+        ),
+    )
+
+
 # (page function, route, browser tab title). All use AdminState.load_admin.
 ADMIN_PAGES = [
     (admin_requests, "/admin", "Account requests"),
     (admin_import, "/admin/import", "Bulk import"),
     (admin_users, "/admin/users", "Approved users"),
+    (admin_workspaces, "/admin/workspaces", "Project workspaces"),
 ]

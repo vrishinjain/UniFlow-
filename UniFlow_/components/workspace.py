@@ -499,14 +499,14 @@ def workspace_portal() -> rx.Component:
                 dashboard_layout(
                     role_label="Faculty",
                     nav=FACULTY_NAV,
-                    active="",
+                    active="/faculty/workspaces",
                     authorized=WorkspaceState.authorized,
                     content=workspace_content(),
                 ),
                 dashboard_layout(
                     role_label="System admin",
                     nav=ADMIN_NAV,
-                    active="",
+                    active="/admin/workspaces",
                     authorized=WorkspaceState.authorized,
                     content=workspace_content(),
                 ),

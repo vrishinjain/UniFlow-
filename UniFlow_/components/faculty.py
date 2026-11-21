@@ -13,6 +13,8 @@ from UniFlow_.courses_services import CourseRow
 from UniFlow_.assignment_services import CourseStudentRow, FacultyCourseStudents
 from UniFlow_.states.faculty_students_state import FacultyStudentsState
 from UniFlow_.components.course_detail import course_detail_content
+from UniFlow_.components.workspace_list import workspace_list_content
+from UniFlow_.states.workspace_list_state import WorkspaceListState
 
 
 FACULTY_NAV = [
@@ -33,6 +35,12 @@ FACULTY_NAV = [
         "users",
         "/faculty/students",
         "See the students you supervise.",
+    ),
+    NavItem(
+        "Project workspaces",
+        "folder-kanban",
+        "/faculty/workspaces",
+        "Open the workspace of each project in your courses.",
     ),
     NavItem(
         "Courses",
@@ -597,6 +605,17 @@ def faculty_course_details() -> rx.Component:
     return _page("/faculty/courses", course_detail_content())
 
 
+def faculty_workspaces() -> rx.Component:
+    return _page(
+        "/faculty/workspaces",
+        workspace_list_content(
+            "Faculty",
+            "Accepted projects with students assigned through your courses.",
+            WorkspaceListState.load_faculty_workspaces,
+        ),
+    )
+
+
 FACULTY_PAGES = [
     (
         faculty_course_details,
@@ -627,5 +646,10 @@ FACULTY_PAGES = [
         faculty_students,
         "/faculty/students",
         "My students",
+    ),
+    (
+        faculty_workspaces,
+        "/faculty/workspaces",
+        "Project workspaces",
     ),
 ]
