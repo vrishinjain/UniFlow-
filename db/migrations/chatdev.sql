@@ -1,7 +1,8 @@
 -- Team chat: one chat per project now, course-wide chats later.
 -- Additive only: creates new tables and indexes, changes nothing existing.
--- Apply to chat-dev first. At release, apply to the live branch after any
--- seed.sql run (seed.sql TRUNCATEs users/projects, which these tables reference).
+-- Run this BEFORE scripts/seed/seed.sql on any branch: seed.sql clears and
+-- fills these tables, so it fails (changing nothing) if they don't exist yet.
+-- Order on every branch: 1) db/migrations/chatdev.sql  2) scripts/seed/seed.sql
 --
 -- Rollback (only if no chat data needs keeping):
 --   DROP TABLE public.chat_message, public.chat_channel_project, public.chat_channel;

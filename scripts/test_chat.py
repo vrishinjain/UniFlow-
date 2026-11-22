@@ -152,17 +152,22 @@ class ChatStructureTests(unittest.TestCase):
         self.assertIn("BETWEEN 1 AND 2000", migration)
         self.assertNotIn("DROP TABLE public.users", migration)
 
-    def test_chat_is_between_team_and_milestones(self):
+    def test_board_and_chat_tabs_below_team(self):
         workspace = (ROOT / "UniFlow_/components/workspace.py").read_text()
-        team = workspace.index('"Project team"')
-        chat = workspace.index("workspace_chat()")
-        milestones = workspace.index("milestones_section()")
-        self.assertLess(team, chat)
-        self.assertLess(chat, milestones)
+        content = workspace[workspace.index("def workspace_content"):]
+        self.assertLess(content.index('"Project team"'), content.index("workspace_tabs()"))
+        self.assertIn('WorkspaceTabState.tab == "chat"', content)
+        self.assertIn("workspace_chat()", content)
+        self.assertIn("workspace_board()", content)
+        board = workspace[workspace.index("def workspace_board"):]
+        self.assertIn("milestones_section()", board[: board.index("\ndef ")])
+        tabs = (ROOT / "UniFlow_/states/workspace_tab_state.py").read_text()
+        self.assertIn('tab: str = "board"', tabs)
 
     def test_chat_state_cleared_on_sign_in_and_out(self):
         login = (ROOT / "UniFlow_/states/login_state.py").read_text()
         self.assertIn("ChatState", login)
+        self.assertIn("WorkspaceTabState", login)
 
 
 if __name__ == "__main__":

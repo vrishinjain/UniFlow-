@@ -264,7 +264,7 @@ def live_indicator() -> rx.Component:
 
 
 def workspace_chat() -> rx.Component:
-    """Team chat card shown at the top of the project workspace."""
+    """Team chat card shown on the workspace's Chat tab."""
     return rx.el.section(
         rx.el.div(
             rx.el.div(
@@ -281,50 +281,33 @@ def workspace_chat() -> rx.Component:
             ),
             rx.el.div(
                 live_indicator(),
-                rx.el.button(
-                    rx.cond(
-                        ChatState.collapsed,
-                        rx.icon("chevron-down", class_name="h-4 w-4"),
-                        rx.icon("chevron-up", class_name="h-4 w-4"),
-                    ),
-                    rx.cond(ChatState.collapsed, "Show chat", "Hide chat"),
-                    type="button",
-                    on_click=ChatState.toggle_collapsed,
-                    aria_expanded=~ChatState.collapsed,
-                    aria_controls="team-chat-body",
-                    class_name=_SECONDARY,
-                ),
                 class_name="flex shrink-0 items-center gap-3",
             ),
             class_name="flex flex-wrap items-start justify-between gap-4",
         ),
-        rx.cond(
-            ChatState.collapsed,
-            rx.fragment(),
-            rx.el.div(
-                chat_alerts(),
-                # When the chat failed to load, show only the error and its
-                # Try again button, not an empty log and composer behind it.
-                rx.cond(
-                    ChatState.error != "",
-                    rx.fragment(),
-                    rx.fragment(
-                        chat_log(),
-                        rx.cond(
-                            ChatState.send_error != "",
-                            rx.el.p(
-                                ChatState.send_error,
-                                role="alert",
-                                class_name="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700",
-                            ),
-                            rx.fragment(),
+        rx.el.div(
+            chat_alerts(),
+            # When the chat failed to load, show only the error and its
+            # Try again button, not an empty log and composer behind it.
+            rx.cond(
+                ChatState.error != "",
+                rx.fragment(),
+                rx.fragment(
+                    chat_log(),
+                    rx.cond(
+                        ChatState.send_error != "",
+                        rx.el.p(
+                            ChatState.send_error,
+                            role="alert",
+                            class_name="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700",
                         ),
-                        chat_composer(),
+                        rx.fragment(),
                     ),
+                    chat_composer(),
                 ),
-                id="team-chat-body",
-                class_name="mt-5",
             ),
+            id="team-chat-body",
+            class_name="mt-5",
         ),
         on_mount=ChatState.start_chat,
         on_unmount=ChatState.stop_chat,

@@ -16,6 +16,7 @@ CHANGED_PYTHON = (
     "UniFlow_/chat_services.py",
     "UniFlow_/states/chat_state.py",
     "UniFlow_/components/workspace_chat.py",
+    "UniFlow_/states/workspace_tab_state.py",
 )
 
 

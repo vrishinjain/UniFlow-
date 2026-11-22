@@ -16,7 +16,8 @@ Run everything against the `chat-dev` Neon branch, never production.
 
 | # | Steps | Expected |
 |---|---|---|
-| 1 | Sign in as an assigned student, open the project workspace | "Team chat" card below "Project team", above milestones; "No messages yet"; Live indicator |
+| 1 | Sign in as an assigned student, open the project workspace | Board and Chat tabs below "Project team"; Board is selected |
+| 1b | Click the Chat tab | "Team chat" card loads; Live indicator; milestones and board are hidden |
 | 2 | Type a message, press Enter | Message appears with "(you)", Student badge and time; box clears |
 | 3 | Shift+Enter in the box | New line, not sent |
 | 4 | Second browser: teammate on the same project | First message visible; new messages from either side appear within ~3 s |
@@ -26,7 +27,7 @@ Run everything against the `chat-dev` Neon branch, never production.
 | 8 | Send `<b>hi</b>` | Shown literally as text, not bold |
 | 9 | Paste 2,001+ characters | Counter turns red, Send disabled |
 | 10 | Send 21 messages within a minute | 21st shows "sending messages too quickly" |
-| 11 | Hide chat → Show chat | Collapses to header; reloads on Show |
+| 11 | Switch Chat → Board → Chat | Board shows milestones and tickets; back on Chat, messages reload and Live returns |
 | 12 | Student from another project opens this workspace URL | Access denied page (no chat) |
 | 13 | Sign out, sign in as a different user in same tab | No messages from the previous session visible |
 | 14 | Leave a tab idle 15+ minutes | "Live updates paused…" with Resume; Resume reloads |

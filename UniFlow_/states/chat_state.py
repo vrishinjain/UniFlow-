@@ -36,8 +36,9 @@ class ChatState(rx.State):
 
     Each browser tab has its own state, so new messages from other people are
     picked up by a background task that polls every few seconds while the
-    chat is open and expanded. Polling stops when the chat is collapsed, the
-    page is left, the session changes, or after 15 minutes without activity.
+    Chat tab is open. Polling stops when the user switches to the Board tab
+    or leaves the page (the chat unmounts), when the session changes, or after
+    15 minutes without activity.
     Every service call re-authorizes the actor in the database.
     """
 
@@ -45,7 +46,6 @@ class ChatState(rx.State):
     channel_id: str = ""
     has_older: bool = False
     draft: str = ""
-    collapsed: bool = False
     loading: bool = False
     loading_older: bool = False
     sending: bool = False
@@ -204,8 +204,6 @@ class ChatState(rx.State):
         self._actor_id = login._session_user_id
         self._password_revision = login.password_revision
         self._project_id = workspace.selected_project_id
-        if self.collapsed:
-            return
         return self._start()
 
     @rx.event
@@ -214,20 +212,8 @@ class ChatState(rx.State):
         self._reset()
 
     @rx.event
-    async def toggle_collapsed(self):
-        self.collapsed = not self.collapsed
-        self.confirm_delete_id = ""
-        if self.collapsed:
-            # Stop polling while hidden; keeps the database idle.
-            self._session += 1
-            self.live = False
-            return
-        if await self._session_ok():
-            return self._start()
-
-    @rx.event
     async def resume_chat(self):
-        if self.collapsed or not await self._session_ok():
+        if not await self._session_ok():
             return
         return self._start()
 
