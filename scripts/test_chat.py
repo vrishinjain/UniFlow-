@@ -112,18 +112,28 @@ class ChatStructureTests(unittest.TestCase):
         return ast.get_source_segment(self.source, self.functions[name])
 
     def test_every_service_authorizes_on_its_connection(self):
+        # Public functions open the connection; their _helpers do the work on it.
         for name in (
-            "load_older_messages",
-            "poll_messages",
-            "post_message",
-            "delete_message",
+            "_load_older_messages",
+            "_poll_messages",
+            "_post_message",
+            "_delete_message",
         ):
             with self.subTest(name=name):
                 self.assertIn(
                     "authorize_channel(connection, actor_id, channel_id)",
                     self.segment(name),
                 )
-        opening = self.segment("open_project_chat")
+        for public in (
+            "open_project_chat",
+            "load_older_messages",
+            "poll_messages",
+            "post_message",
+            "delete_message",
+        ):
+            with self.subTest(public=public):
+                self.assertIn(f"_{public}(connection, ", self.segment(public))
+        opening = self.segment("_open_project_chat")
         self.assertLess(
             opening.index("authorize_workspace(connection, actor_id, project_id)"),
             opening.index("SQL_ENSURE_PROJECT_CHANNEL"),
@@ -136,7 +146,7 @@ class ChatStructureTests(unittest.TestCase):
                 self.assertIn("_get_engine().begin()", self.segment(name))
 
     def test_sender_comes_from_session_not_browser(self):
-        post = self.segment("post_message")
+        post = self.segment("_post_message")
         self.assertIn('"actor_id": actor_id', post)
         self.assertNotIn("sender_id", post)
 

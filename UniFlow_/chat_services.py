@@ -362,6 +362,21 @@ def _read_page(
     )
 
 
+def _open_project_chat(
+    connection: Connection, actor_id: int, project_id: int
+) -> ChatPage:
+    # Authorize before creating anything, so non-members cannot create channels.
+    authorize_workspace(connection, actor_id, project_id)
+    connection.execute(
+        text(SQL_ENSURE_PROJECT_CHANNEL), {"project_id": project_id}
+    )
+    channel_id = connection.execute(
+        text(SQL_PROJECT_CHANNEL_ID), {"project_id": project_id}
+    ).scalar_one()
+    actor = authorize_channel(connection, actor_id, int(channel_id))
+    return _read_page(connection, actor, None)
+
+
 def open_project_chat(actor_id: int, project_id: int) -> ChatPage:
     """Authorize as a workspace member, create the project's channel on first
     use, and return the latest page of messages."""
@@ -369,16 +384,14 @@ def open_project_chat(actor_id: int, project_id: int) -> ChatPage:
     _validate_user_id(project_id)
     _require_database()
     with _get_engine().begin() as connection:
-        # Authorize before creating anything, so non-members cannot create channels.
-        authorize_workspace(connection, actor_id, project_id)
-        connection.execute(
-            text(SQL_ENSURE_PROJECT_CHANNEL), {"project_id": project_id}
-        )
-        channel_id = connection.execute(
-            text(SQL_PROJECT_CHANNEL_ID), {"project_id": project_id}
-        ).scalar_one()
-        actor = authorize_channel(connection, actor_id, int(channel_id))
-        return _read_page(connection, actor, None)
+        return _open_project_chat(connection, actor_id, project_id)
+
+
+def _load_older_messages(
+    connection: Connection, actor_id: int, channel_id: int, before_id: int
+) -> ChatPage:
+    actor = authorize_channel(connection, actor_id, channel_id)
+    return _read_page(connection, actor, before_id)
 
 
 def load_older_messages(
@@ -389,8 +402,35 @@ def load_older_messages(
     before_id = validate_chat_id(before_id)
     _require_database()
     with _get_engine().connect() as connection:
-        actor = authorize_channel(connection, actor_id, channel_id)
-        return _read_page(connection, actor, before_id)
+        return _load_older_messages(connection, actor_id, channel_id, before_id)
+
+
+def _poll_messages(
+    connection: Connection,
+    actor_id: int,
+    channel_id: int,
+    after_id: int,
+    since: str,
+) -> ChatPoll:
+    actor = authorize_channel(connection, actor_id, channel_id)
+    params = {"channel_id": channel_id, "after_id": after_id, "since": since}
+    rows = (
+        connection.execute(
+            text(SQL_POLL_MESSAGES), {**params, "limit": POLL_LIMIT + 1}
+        )
+        .mappings()
+        .all()
+    )
+    deleted_rows = connection.execute(
+        text(SQL_POLL_DELETED), {"channel_id": channel_id, "since": since}
+    ).all()
+    server_time = _server_time(connection)
+    return ChatPoll(
+        messages=[_to_message(row, actor) for row in rows[:POLL_LIMIT]],
+        deleted_ids=[str(row[0]) for row in deleted_rows],
+        server_time=server_time,
+        truncated=len(rows) > POLL_LIMIT,
+    )
 
 
 def poll_messages(
@@ -404,34 +444,39 @@ def poll_messages(
     since = validate_since(since)
     _require_database()
     with _get_engine().connect() as connection:
-        actor = authorize_channel(connection, actor_id, channel_id)
-        params = {
-            "channel_id": channel_id,
-            "after_id": after_id,
-            "since": since,
-        }
-        rows = (
-            connection.execute(
-                text(SQL_POLL_MESSAGES), {**params, "limit": POLL_LIMIT + 1}
-            )
-            .mappings()
-            .all()
-        )
-        deleted_rows = connection.execute(
-            text(SQL_POLL_DELETED),
-            {"channel_id": channel_id, "since": since},
-        ).all()
-        server_time = _server_time(connection)
-    truncated = len(rows) > POLL_LIMIT
-    return ChatPoll(
-        messages=[_to_message(row, actor) for row in rows[:POLL_LIMIT]],
-        deleted_ids=[str(row[0]) for row in deleted_rows],
-        server_time=server_time,
-        truncated=truncated,
-    )
+        return _poll_messages(connection, actor_id, channel_id, after_id, since)
 
 
 # --- Writes -----------------------------------------------------------------
+
+
+def _post_message(
+    connection: Connection, actor_id: int, channel_id: int, cleaned: str
+) -> ChatMessage:
+    actor = authorize_channel(connection, actor_id, channel_id)
+    if actor["archived"]:
+        raise ValueError("This chat is archived and no longer accepts messages.")
+    recent = connection.execute(
+        text(SQL_RECENT_SENDS),
+        {"actor_id": actor_id, "window_seconds": RATE_LIMIT_SECONDS},
+    ).scalar_one()
+    if int(recent) >= RATE_LIMIT_MESSAGES:
+        raise ValueError(
+            "You're sending messages too quickly. Wait a moment and try again."
+        )
+    message_id = connection.execute(
+        text(SQL_INSERT_MESSAGE),
+        {"channel_id": channel_id, "actor_id": actor_id, "body": cleaned},
+    ).scalar_one()
+    row = (
+        connection.execute(
+            text(SQL_ONE_MESSAGE),
+            {"channel_id": channel_id, "message_id": int(message_id)},
+        )
+        .mappings()
+        .one()
+    )
+    return _to_message(row, actor)
 
 
 def post_message(actor_id: int, channel_id: int, body: object) -> ChatMessage:
@@ -440,30 +485,45 @@ def post_message(actor_id: int, channel_id: int, body: object) -> ChatMessage:
     channel_id = validate_chat_id(channel_id, "Channel")
     _require_database()
     with _get_engine().begin() as connection:
-        actor = authorize_channel(connection, actor_id, channel_id)
-        if actor["archived"]:
-            raise ValueError("This chat is archived and no longer accepts messages.")
-        recent = connection.execute(
-            text(SQL_RECENT_SENDS),
-            {"actor_id": actor_id, "window_seconds": RATE_LIMIT_SECONDS},
-        ).scalar_one()
-        if int(recent) >= RATE_LIMIT_MESSAGES:
-            raise ValueError(
-                "You're sending messages too quickly. Wait a moment and try again."
-            )
-        message_id = connection.execute(
-            text(SQL_INSERT_MESSAGE),
-            {"channel_id": channel_id, "actor_id": actor_id, "body": cleaned},
-        ).scalar_one()
-        row = (
-            connection.execute(
-                text(SQL_ONE_MESSAGE),
-                {"channel_id": channel_id, "message_id": int(message_id)},
-            )
-            .mappings()
-            .one()
+        return _post_message(connection, actor_id, channel_id, cleaned)
+
+
+def _delete_message(
+    connection: Connection, actor_id: int, channel_id: int, message_id: int
+) -> ChatMessage:
+    actor = authorize_channel(connection, actor_id, channel_id)
+    target = (
+        connection.execute(
+            text(SQL_LOCK_MESSAGE),
+            {"channel_id": channel_id, "message_id": message_id},
         )
-        return _to_message(row, actor)
+        .mappings()
+        .first()
+    )
+    if target is None:
+        raise ValueError("Message not found in this chat.")
+    if target["deleted_at"] is None:
+        if int(target["sender"]) != actor_id and not actor["can_moderate"]:
+            raise ValueError("You can only delete your own messages.")
+        if actor["archived"]:
+            raise ValueError("This chat is archived.")
+        connection.execute(
+            text(SQL_DELETE_MESSAGE),
+            {
+                "channel_id": channel_id,
+                "message_id": message_id,
+                "actor_id": actor_id,
+            },
+        )
+    row = (
+        connection.execute(
+            text(SQL_ONE_MESSAGE),
+            {"channel_id": channel_id, "message_id": message_id},
+        )
+        .mappings()
+        .one()
+    )
+    return _to_message(row, actor)
 
 
 def delete_message(
@@ -479,36 +539,4 @@ def delete_message(
     message_id = validate_chat_id(message_id)
     _require_database()
     with _get_engine().begin() as connection:
-        actor = authorize_channel(connection, actor_id, channel_id)
-        target = (
-            connection.execute(
-                text(SQL_LOCK_MESSAGE),
-                {"channel_id": channel_id, "message_id": message_id},
-            )
-            .mappings()
-            .first()
-        )
-        if target is None:
-            raise ValueError("Message not found in this chat.")
-        if target["deleted_at"] is None:
-            if int(target["sender"]) != actor_id and not actor["can_moderate"]:
-                raise ValueError("You can only delete your own messages.")
-            if actor["archived"]:
-                raise ValueError("This chat is archived.")
-            connection.execute(
-                text(SQL_DELETE_MESSAGE),
-                {
-                    "channel_id": channel_id,
-                    "message_id": message_id,
-                    "actor_id": actor_id,
-                },
-            )
-        row = (
-            connection.execute(
-                text(SQL_ONE_MESSAGE),
-                {"channel_id": channel_id, "message_id": message_id},
-            )
-            .mappings()
-            .one()
-        )
-        return _to_message(row, actor)
+        return _delete_message(connection, actor_id, channel_id, message_id)

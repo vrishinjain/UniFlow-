@@ -8,8 +8,13 @@ Run everything against the `chat-dev` Neon branch, never production.
 2. Local `.env` points `REFLEX_DB_URL` at `chat-dev`, loaded with `set -a; source .env; set +a`.
 3. Checks that need no database:
    ```bash
-   python scripts/test_chat.py
-   python scripts/test_workspace_static.py
+   python -m scripts.test_chat
+   python -m scripts.test_workspace_static
+   ```
+4. Permission tests (need `TEST_DATABASE_URL` pointing at a test branch with the current
+   schema plus `db/migrations/chatdev.sql`; they create throwaway data and roll it back):
+   ```bash
+   python -m pytest tests/test_chat_permissions.py -v
    ```
 
 ## Manual checks (two browsers, e.g. one normal + one incognito)
