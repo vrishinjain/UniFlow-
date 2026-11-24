@@ -12,6 +12,8 @@ from UniFlow_.workspace_services import (
     TICKET_STATUSES,
 )
 from UniFlow_.components.workspace_ticket_dialogs import ticket_dialogs
+from UniFlow_.components.workspace_chat import workspace_chat
+from UniFlow_.states.workspace_tab_state import WorkspaceTabState
 from UniFlow_.components.workspace_milestones import (
     milestones_section,
     milestone_filter,
@@ -290,40 +292,14 @@ def workspace_column(
     )
 
 
-def workspace_content() -> rx.Component:
-    return rx.el.div(
-        page_header("Project workspace", WorkspaceState.title),
-        rx.el.section(
-            rx.el.h2(
-                "Project team",
-                class_name="text-lg font-semibold text-[#172B3D]",
-            ),
-            rx.cond(
-                WorkspaceState.team.length() > 0,
-                rx.el.ul(
-                    rx.foreach(WorkspaceState.team, workspace_member),
-                    class_name="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3",
-                ),
-                rx.el.p(
-                    "No eligible team members.",
-                    class_name="mt-3 text-sm text-[#667078]",
-                ),
-            ),
-            class_name="mb-8 rounded-2xl border border-[#E2E4DC] bg-white p-6",
-        ),
+def workspace_board() -> rx.Component:
+    """Milestones, filters and the sprint board (the Board tab)."""
+    return rx.fragment(
         milestones_section(),
         rx.el.div(
             milestone_filter(),
             assignee_filter(),
             class_name="mb-8 flex w-full flex-wrap items-end gap-4",
-        ),
-        ticket_dialogs(),
-        milestone_dialog(),
-        rx.el.p(
-            WorkspaceState.announcement,
-            role="status",
-            aria_live="polite",
-            class_name="sr-only text-[#172B3D]",
         ),
         rx.cond(
             (WorkspaceState.mutation_error != "")
@@ -379,6 +355,84 @@ def workspace_content() -> rx.Component:
                 role="region",
                 aria_label="Sprint board, scroll horizontally for all status columns",
                 class_name="w-full min-w-0 overflow-x-auto rounded-2xl pb-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#246D67]",
+            ),
+        ),
+    )
+
+
+_TAB = "inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#246D67]"
+_TAB_ACTIVE = _TAB + " border-[#246D67] text-[#1C5752]"
+_TAB_IDLE = _TAB + " border-transparent text-[#667078] hover:text-[#172B3D]"
+
+
+def workspace_tab(tab: str, label: str, icon: str) -> rx.Component:
+    selected = WorkspaceTabState.tab == tab
+    return rx.el.button(
+        rx.icon(icon, class_name="h-4 w-4"),
+        label,
+        type="button",
+        id=f"workspace-tab-{tab}",
+        role="tab",
+        aria_selected=selected,
+        aria_controls=f"workspace-panel-{tab}",
+        on_click=WorkspaceTabState.set_tab(tab),
+        class_name=rx.cond(selected, _TAB_ACTIVE, _TAB_IDLE),
+    )
+
+
+def workspace_tabs() -> rx.Component:
+    return rx.el.div(
+        workspace_tab("board", "Board", "kanban"),
+        workspace_tab("chat", "Chat", "messages-square"),
+        role="tablist",
+        aria_label="Workspace sections",
+        class_name="mb-6 flex gap-2 border-b border-[#E2E4DC]",
+    )
+
+
+def workspace_content() -> rx.Component:
+    return rx.el.div(
+        page_header("Project workspace", WorkspaceState.title),
+        rx.el.section(
+            rx.el.h2(
+                "Project team",
+                class_name="text-lg font-semibold text-[#172B3D]",
+            ),
+            rx.cond(
+                WorkspaceState.team.length() > 0,
+                rx.el.ul(
+                    rx.foreach(WorkspaceState.team, workspace_member),
+                    class_name="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3",
+                ),
+                rx.el.p(
+                    "No eligible team members.",
+                    class_name="mt-3 text-sm text-[#667078]",
+                ),
+            ),
+            class_name="mb-8 rounded-2xl border border-[#E2E4DC] bg-white p-6",
+        ),
+        ticket_dialogs(),
+        milestone_dialog(),
+        rx.el.p(
+            WorkspaceState.announcement,
+            role="status",
+            aria_live="polite",
+            class_name="sr-only text-[#172B3D]",
+        ),
+        workspace_tabs(),
+        rx.cond(
+            WorkspaceTabState.tab == "chat",
+            rx.el.div(
+                workspace_chat(),
+                id="workspace-panel-chat",
+                role="tabpanel",
+                aria_labelledby="workspace-tab-chat",
+            ),
+            rx.el.div(
+                workspace_board(),
+                id="workspace-panel-board",
+                role="tabpanel",
+                aria_labelledby="workspace-tab-board",
             ),
         ),
         class_name="w-full min-w-0",

@@ -13,6 +13,10 @@ CHANGED_PYTHON = (
     "UniFlow_/components/student.py",
     "UniFlow_/states/login_state.py",
     "UniFlow_/UniFlow_.py",
+    "UniFlow_/chat_services.py",
+    "UniFlow_/states/chat_state.py",
+    "UniFlow_/components/workspace_chat.py",
+    "UniFlow_/states/workspace_tab_state.py",
 )
 
 
@@ -29,6 +33,9 @@ def main() -> None:
     importlib.import_module("UniFlow_.UniFlow_")
     from UniFlow_.components.workspace import workspace_portal
 
+    from UniFlow_.components.workspace_chat import workspace_chat
+
+    assert isinstance(workspace_chat(), rx.Component)
     component = workspace_portal()
     assert isinstance(component, rx.Component)
     assert component.render()
